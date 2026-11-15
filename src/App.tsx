@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, deleteTransaction, getFinanceSnapshot, initializeFinanceData, updateTransaction } from './core/finance'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, updateTransaction } from './core/finance'
 import type { CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
@@ -15,6 +15,17 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [transactionWalletId, setTransactionWalletId] = useState('')
+  const [walletModalOpen, setWalletModalOpen] = useState(false)
+  const [transferModalOpen, setTransferModalOpen] = useState(false)
+  const [walletName, setWalletName] = useState('')
+  const [walletType, setWalletType] = useState<WalletRecord['type']>('bank')
+  const [openingBalance, setOpeningBalance] = useState('0')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferFrom, setTransferFrom] = useState('')
+  const [transferTo, setTransferTo] = useState('')
+  const [transferDate, setTransferDate] = useState(today())
+  const [transferNote, setTransferNote] = useState('')
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -51,10 +62,10 @@ export default function App() {
     event.preventDefault(); setError('')
     const numericAmount = Number(amount)
     if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) { setError('Masukkan nominal Rupiah berupa angka bulat lebih dari nol.'); return }
-    if (!wallets[0] || !categoryId) { setError('Dompet atau kategori belum siap. Coba lagi.'); return }
+    if (!wallets.some((wallet) => wallet.id === transactionWalletId) || !categoryId) { setError('Dompet atau kategori belum siap. Coba lagi.'); return }
     setSaving(true)
     try {
-      const input = { type, amount: numericAmount, walletId: wallets[0].id, categoryId, transactionDate, note }
+      const input = { type, amount: numericAmount, walletId: transactionWalletId, categoryId, transactionDate, note }
       if (editingId) await updateTransaction(editingId, input)
       else await addTransaction(input)
       await refresh(); setAmount(''); setNote(''); setTransactionDate(today()); setEditingId(null); setModalOpen(false)
@@ -64,13 +75,30 @@ export default function App() {
   }
 
   function openNewTransaction() {
-    setEditingId(null); setType('expense'); setAmount(''); setNote(''); setTransactionDate(today()); setError(''); setModalOpen(true)
+    setEditingId(null); setType('expense'); setAmount(''); setNote(''); setTransactionDate(today()); setTransactionWalletId(wallets[0]?.id ?? ''); setError(''); setModalOpen(true)
   }
 
   function openEditTransaction(transaction: TransactionRecord) {
     setEditingId(transaction.id); setType(transaction.type === 'income' ? 'income' : 'expense')
-    setAmount(String(transaction.amount)); setCategoryId(transaction.categoryId ?? '')
+    setAmount(String(transaction.amount)); setTransactionWalletId(transaction.walletId); setCategoryId(transaction.categoryId ?? '')
     setTransactionDate(transaction.transactionDate); setNote(transaction.note); setError(''); setModalOpen(true)
+  }
+
+  async function submitWallet(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('')
+    const balance = Number(openingBalance)
+    try {
+      await createWallet({ name: walletName, type: walletType, openingBalance: balance })
+      await refresh(); setWalletName(''); setWalletType('bank'); setOpeningBalance('0'); setWalletModalOpen(false)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Dompet gagal dibuat.') }
+  }
+
+  async function submitTransfer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('')
+    try {
+      await addTransfer({ amount: Number(transferAmount), walletId: transferFrom, destinationWalletId: transferTo, transactionDate: transferDate, note: transferNote })
+      await refresh(); setTransferAmount(''); setTransferNote(''); setTransferDate(today()); setTransferModalOpen(false)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Transfer gagal disimpan.') }
   }
 
   async function handleDelete(transaction: TransactionRecord) {
@@ -96,6 +124,11 @@ export default function App() {
         <p className="balance-amount">{ready ? formatRupiah(totalBalance) : 'Memuat…'}</p>
         <p className="balance-note">{wallets.length ? `Dompet utama: ${wallets[0].name}` : 'Saldo tersimpan di perangkat ini.'}</p>
         <div className="balance-decoration" aria-hidden="true" />
+      </section>
+      <section className="wallet-section">
+        <div className="section-heading"><div><p className="eyebrow">TEMPAT PENYIMPANAN</p><h2>Dompetmu</h2></div><button className="secondary-button" type="button" onClick={() => { setError(''); setWalletModalOpen(true) }}><Plus size={15} /> Dompet</button></div>
+        <div className="wallet-list">{wallets.map((wallet) => { const balance = balances.find((item) => item.walletId === wallet.id)?.balance ?? wallet.openingBalance; return <article className="wallet-item" key={wallet.id}><div className="wallet-item-icon"><Wallet size={17} /></div><div><strong>{wallet.name}</strong><span>{wallet.type === 'cash' ? 'Tunai' : wallet.type === 'bank' ? 'Rekening bank' : wallet.type === 'ewallet' ? 'E-wallet' : 'Lainnya'}</span></div><b>{formatRupiah(balance)}</b></article> })}</div>
+        <button className="transfer-button" type="button" onClick={() => { setError(''); setTransferFrom(wallets[0]?.id ?? ''); setTransferTo(wallets[1]?.id ?? ''); setTransferModalOpen(true) }} disabled={wallets.length < 2}><ArrowLeftRight size={16} /> Transfer antar-dompet</button>
       </section>
       <section className="summary-grid" aria-label="Ringkasan keuangan">
         <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft size={18} /></div><span>Pemasukan tercatat</span><strong>{formatRupiah(totalIncome)}</strong></article>
@@ -137,6 +170,8 @@ export default function App() {
             </div>
             <label className="field-label" htmlFor="amount">Nominal (Rp)</label>
             <input id="amount" className="form-input amount-input" type="number" inputMode="numeric" min="1" step="1" placeholder="Contoh: 25000" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+            <label className="field-label" htmlFor="transaction-wallet">Sumber dompet</label>
+            <select id="transaction-wallet" className="form-input" value={transactionWalletId} onChange={(event) => setTransactionWalletId(event.target.value)} required>{wallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</select>
             <label className="field-label" htmlFor="category">Kategori</label>
             <select id="category" className="form-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>{availableCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
             <label className="field-label" htmlFor="date">Tanggal</label>
