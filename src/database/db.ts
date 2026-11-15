@@ -28,6 +28,24 @@ export interface BudgetRecord {
   updatedAt: string
 }
 
+export interface SavingsGoalRecord {
+  id: string
+  name: string
+  targetAmount: number
+  deadline?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GoalContributionRecord {
+  id: string
+  goalId: string
+  amount: number
+  contributionDate: string
+  note: string
+  createdAt: string
+}
+
 export interface TransactionRecord {
   id: string
   type: 'income' | 'expense' | 'transfer'
@@ -47,6 +65,8 @@ export class RupiaDatabase extends Dexie {
   categories!: Table<CategoryRecord, string>
   transactions!: Table<TransactionRecord, string>
   budgets!: Table<BudgetRecord, string>
+  savingsGoals!: Table<SavingsGoalRecord, string>
+  goalContributions!: Table<GoalContributionRecord, string>
 
   constructor() {
     super('rupia-local')
@@ -60,6 +80,14 @@ export class RupiaDatabase extends Dexie {
       categories: 'id, type, name, isDefault',
       transactions: 'id, type, walletId, destinationWalletId, categoryId, transactionDate, createdAt, deletedAt',
       budgets: 'id, month, categoryId, [month+categoryId]',
+    })
+    this.version(3).stores({
+      wallets: 'id, name, type, createdAt',
+      categories: 'id, type, name, isDefault',
+      transactions: 'id, type, walletId, destinationWalletId, categoryId, transactionDate, createdAt, deletedAt',
+      budgets: 'id, month, categoryId, [month+categoryId]',
+      savingsGoals: 'id, name, deadline, createdAt',
+      goalContributions: 'id, goalId, contributionDate, createdAt',
     })
   }
 }
