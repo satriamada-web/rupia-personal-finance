@@ -222,3 +222,14 @@ footer { padding: 34px 0 5px; color: #9aa59d; text-align: center; font-size: 11p
 .goal-footer button { padding: 7px 10px; border: 1px solid #dce8dc; border-radius: 8px; color: #2e7354; background: #f1f7f0; font-size: 10px; font-weight: 700; }
 .goal-hint { margin: 12px 0 0; color: #929d95; font-size: 9px; line-height: 1.5; }
 @media (max-width: 480px) { .goals-section { padding: 14px; } .goal-card { padding: 12px; } .goal-amounts strong { font-size: 15px; } }
+
+.goal-history { margin-top: 12px; border-top: 1px solid #e9eee7; padding-top: 10px; }
+.goal-history summary { color: #5e7565; cursor: pointer; font-size: 10px; font-weight: 700; list-style-position: inside; }
+.goal-history-list { display: grid; gap: 0; margin-top: 5px; }
+.goal-history-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid #edf1eb; }
+.goal-history-item > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.goal-history-item strong { color: #405147; font-size: 11px; }
+.goal-history-item span { color: #89958c; font-size: 9px; overflow-wrap: anywhere; }
+.goal-history-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.goal-history-actions button { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #e3eae1; border-radius: 7px; color: #718276; background: #fff; }
+.goal-history-actions button:last-child { color: #b66a60; }
