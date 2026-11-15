@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  color: #25332c;
+  background: #f5f7f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button { font: inherit; }
+.app-shell { width: min(100% - 40px, 760px); margin: 0 auto; padding: 26px 0 30px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: inline-flex; align-items: center; gap: 9px; color: #25332c; text-decoration: none; font: 800 25px Manrope, sans-serif; letter-spacing: -1.4px; }
+.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: #2e7354; color: white; font-size: 19px; letter-spacing: 0; }
+.offline-pill { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #e1e8df; border-radius: 30px; color: #65766b; background: #fff; font-size: 11px; font-weight: 600; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #55a978; }
+.welcome { padding: 54px 0 25px; }
+.eyebrow { margin: 0 0 12px; color: #64816f; font-size: 10px; font-weight: 800; letter-spacing: 1.7px; }
+h1 { margin: 0; font: 800 clamp(30px, 6vw, 46px)/1.13 Manrope, sans-serif; letter-spacing: -2px; }
+h1 span { color: #39815d; }
+.welcome-copy { max-width: 470px; margin: 14px 0 0; color: #748178; font-size: 14px; line-height: 1.7; }
+.balance-card { position: relative; overflow: hidden; padding: 25px 27px; border-radius: 22px; color: #fff; background: #2e7354; box-shadow: 0 12px 28px #2e73541c; }
+.balance-top { display: flex; align-items: center; justify-content: space-between; color: #d4e6da; font-size: 13px; }
+.balance-amount { position: relative; z-index: 1; margin: 19px 0 5px; font: 800 clamp(27px, 6vw, 38px) Manrope, sans-serif; letter-spacing: -1px; }
+.balance-note { position: relative; z-index: 1; margin: 0; color: #d4e6da; font-size: 11px; }
+.balance-decoration { position: absolute; right: -45px; bottom: -100px; width: 230px; height: 230px; border: 1px solid #ffffff20; border-radius: 50%; box-shadow: 0 0 0 24px #ffffff0b, 0 0 0 48px #ffffff08; }
+.summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 15px; }
+.summary-card { display: grid; gap: 8px; padding: 18px; border: 1px solid #e8ede5; border-radius: 17px; background: #fff; }
+.summary-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; }
+.summary-icon.income { color: #34845a; background: #eaf5ed; }
+.summary-icon.expense { color: #c17a51; background: #fbf0e9; }
+.summary-card span { color: #7c8980; font-size: 12px; }
+.summary-card strong { font: 700 17px Manrope, sans-serif; letter-spacing: -.5px; }
+.first-step { display: flex; align-items: center; gap: 14px; margin-top: 25px; padding: 18px; border: 1px solid #e8ede5; border-radius: 17px; background: #fff; }
+.first-step-icon { display: grid; flex: 0 0 42px; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: #39815d; background: #edf5ee; }
+.first-step h2 { margin: 0 0 5px; font: 700 14px Manrope, sans-serif; }
+.first-step p { margin: 0; color: #7c8980; font-size: 11px; line-height: 1.5; }
+.add-button { display: grid; flex: 0 0 36px; place-items: center; width: 36px; height: 36px; margin-left: auto; border: 0; border-radius: 12px; color: white; background: #39815d; }
+.add-button:disabled { opacity: .45; cursor: not-allowed; }
+footer { padding: 34px 0 5px; color: #9aa59d; text-align: center; font-size: 11px; }
+footer span { padding: 0 4px; }
+@media (max-width: 480px) {
+  .app-shell { width: min(100% - 30px, 760px); padding-top: 19px; }
+  .welcome { padding-top: 43px; }
+  .balance-card { padding: 22px; }
+  .summary-card { padding: 15px; }
+  .summary-card strong { font-size: 15px; }
+  .first-step { gap: 10px; padding: 14px; }
+}
