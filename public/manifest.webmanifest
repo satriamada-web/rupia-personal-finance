@@ -1,0 +1,11 @@
+{
+  "name": "Rupia — Keuangan Pribadi",
+  "short_name": "Rupia",
+  "description": "Catat dan pahami keuangan pribadimu.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f2",
+  "theme_color": "#f5f7f2",
+  "lang": "id",
+  "icons": []
+}
