@@ -244,3 +244,35 @@ footer { padding: 34px 0 5px; color: #9aa59d; text-align: center; font-size: 11p
 .report-range .form-input { min-width: 0; }
 .report-section .backup-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 @media (max-width: 520px) { .report-section { padding: 16px; } .report-range { grid-template-columns: 1fr; gap: 7px; } .report-range .field-label:not(:first-child) { margin-top: 8px; } }
+
+
+/* Floating shortcut for fast transaction entry */
+.quick-add-fab {
+  position: fixed;
+  z-index: 30;
+  right: max(20px, calc((100vw - 720px) / 2 + 20px));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 62px;
+  height: 58px;
+  padding: 0 19px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #2e7354;
+  box-shadow: 0 8px 24px rgba(35, 91, 63, .28);
+  font: 700 13px Manrope, sans-serif;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.quick-add-fab:active { transform: scale(.95); box-shadow: 0 4px 12px rgba(35, 91, 63, .22); }
+.quick-add-fab:focus-visible { outline: 3px solid #a8d4b5; outline-offset: 3px; }
+@media (min-width: 900px) {
+  .quick-add-fab { right: calc((100vw - 720px) / 2 + 20px); }
+}
+@media (max-width: 480px) {
+  .quick-add-fab { right: 18px; bottom: max(20px, env(safe-area-inset-bottom)); height: 56px; }
+}
