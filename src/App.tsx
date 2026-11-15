@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory } from './core/finance'
-import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory, createSavingsGoal, addGoalContribution, deleteSavingsGoal } from './core/finance'
+import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord, SavingsGoalRecord, GoalContributionRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
 const today = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10) }
@@ -14,6 +14,18 @@ export default function App() {
   const [categories, setCategories] = useState<CategoryRecord[]>([])
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [budgets, setBudgets] = useState<BudgetRecord[]>([])
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoalRecord[]>([])
+  const [goalContributions, setGoalContributions] = useState<GoalContributionRecord[]>([])
+  const [goalModalOpen, setGoalModalOpen] = useState(false)
+  const [contributionGoalId, setContributionGoalId] = useState<string | null>(null)
+  const [goalName, setGoalName] = useState('')
+  const [goalTarget, setGoalTarget] = useState('')
+  const [goalDeadline, setGoalDeadline] = useState('')
+  const [contributionAmount, setContributionAmount] = useState('')
+  const [contributionDate, setContributionDate] = useState(today())
+  const [contributionNote, setContributionNote] = useState('')
+  const [goalError, setGoalError] = useState('')
+  const [goalSaving, setGoalSaving] = useState(false)
   const [budgetMonth, setBudgetMonth] = useState(currentMonth())
   const [analyticsMonth, setAnalyticsMonth] = useState(currentMonth())
   const [calendarMonth, setCalendarMonth] = useState(currentMonth())
@@ -59,14 +71,14 @@ export default function App() {
 
   async function refresh() {
     const snapshot = await getFinanceSnapshot()
-    setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets)
+    setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets); setSavingsGoals(snapshot.savingsGoals); setGoalContributions(snapshot.goalContributions)
   }
 
   useEffect(() => {
     let active = true
     initializeFinanceData().then(getFinanceSnapshot).then((snapshot) => {
       if (!active) return
-      setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets); setReady(true)
+      setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets); setSavingsGoals(snapshot.savingsGoals); setGoalContributions(snapshot.goalContributions); setReady(true)
     }).catch(() => { if (active) setError('Data lokal belum dapat dibuka. Coba muat ulang aplikasi.') })
     return () => { active = false }
   }, [])
@@ -234,6 +246,31 @@ export default function App() {
     setCategoryEditingId(category.id); setCategoryName(category.name); setCategoryType(category.type); setCategoryError(''); setCategoryModalOpen(true)
   }
 
+  async function submitGoal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setGoalError(''); setGoalSaving(true)
+    try {
+      await createSavingsGoal({ name: goalName, targetAmount: Number(goalTarget), ...(goalDeadline ? { deadline: goalDeadline } : {}) })
+      await refresh(); setGoalModalOpen(false); setGoalName(''); setGoalTarget(''); setGoalDeadline('')
+    } catch (cause) { setGoalError(cause instanceof Error ? cause.message : 'Target gagal disimpan.') }
+    finally { setGoalSaving(false) }
+  }
+
+  async function submitContribution(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!contributionGoalId) return
+    setGoalError(''); setGoalSaving(true)
+    try {
+      await addGoalContribution({ goalId: contributionGoalId, amount: Number(contributionAmount), contributionDate, note: contributionNote })
+      await refresh(); setContributionGoalId(null); setContributionAmount(''); setContributionNote('')
+    } catch (cause) { setGoalError(cause instanceof Error ? cause.message : 'Kontribusi gagal disimpan.') }
+    finally { setGoalSaving(false) }
+  }
+
+  async function handleDeleteGoal(goal: SavingsGoalRecord) {
+    if (!window.confirm('Hapus target "' + goal.name + '" beserta catatan kontribusinya?')) return
+    try { await deleteSavingsGoal(goal.id); await refresh() }
+    catch (cause) { setGoalError(cause instanceof Error ? cause.message : 'Target gagal dihapus.') }
+  }
+
   async function submitCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setCategoryError(''); setCategorySaving(true)
     try {
@@ -310,6 +347,21 @@ export default function App() {
         <div className="section-heading"><div><p className="eyebrow">TEMPAT PENYIMPANAN</p><h2>Dompetmu</h2></div><button className="secondary-button" type="button" onClick={() => { setError(''); setWalletModalOpen(true) }}><Plus size={15} /> Dompet</button></div>
         <div className="wallet-list">{wallets.map((wallet) => { const balance = balances.find((item) => item.walletId === wallet.id)?.balance ?? wallet.openingBalance; return <article className="wallet-item" key={wallet.id}><div className="wallet-item-icon"><Wallet size={17} /></div><div><strong>{wallet.name}</strong><span>{wallet.type === 'cash' ? 'Tunai' : wallet.type === 'bank' ? 'Rekening bank' : wallet.type === 'ewallet' ? 'E-wallet' : 'Lainnya'}</span></div><b>{formatRupiah(balance)}</b></article> })}</div>
         <button className="transfer-button" type="button" onClick={() => { setError(''); setTransferFrom(wallets[0]?.id ?? ''); setTransferTo(wallets[1]?.id ?? ''); setTransferModalOpen(true) }} disabled={wallets.length < 2}><ArrowLeftRight size={16} /> Transfer antar-dompet</button>
+      </section>
+      <section className="goals-section">
+        <div className="section-heading"><div><p className="eyebrow">SIMPAN UNTUK MASA DEPAN</p><h2>Target tabungan</h2></div><button className="secondary-button" type="button" onClick={() => { setGoalError(''); setGoalModalOpen(true) }}><Plus size={15} /> Target</button></div>
+        {savingsGoals.length ? <div className="goals-list">{savingsGoals.map((goal) => {
+          const contributed = goalContributions.filter((item) => item.goalId === goal.id).reduce((sum, item) => sum + item.amount, 0)
+          const percent = Math.min(100, Math.round(contributed / goal.targetAmount * 100))
+          return <article className="goal-card" key={goal.id}>
+            <div className="goal-heading"><div><strong>{goal.name}</strong><span>{goal.deadline ? 'Target: ' + new Date(goal.deadline + 'T12:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Tanpa batas waktu'}</span></div><button className="row-action delete-action" type="button" aria-label={'Hapus target ' + goal.name} onClick={() => handleDeleteGoal(goal)}><Trash2 size={14} /></button></div>
+            <div className="goal-amounts"><strong>{formatRupiah(contributed)}</strong><span>dari {formatRupiah(goal.targetAmount)}</span></div>
+            <div className="goal-track"><i style={{ width: percent + '%' }} /></div>
+            <div className="goal-footer"><span>{percent}% tercapai{contributed >= goal.targetAmount ? ' · Target tercapai!' : ''}</span><button type="button" onClick={() => { setGoalError(''); setContributionGoalId(goal.id); setContributionAmount(''); setContributionDate(today()); setContributionNote('') }}>+ Catat tabungan</button></div>
+          </article>
+        })}</div> : <div className="goals-empty"><strong>Belum ada target tabungan</strong><p>Buat target pertamamu, lalu catat setiap kali kamu menyisihkan uang.</p></div>}
+        {goalError && !goalModalOpen && !contributionGoalId && <p className="form-error" role="alert">{goalError}</p>}
+        <p className="goal-hint">Kontribusi tabungan hanya mencatat progres target. Tidak mengurangi saldo dompet atau dihitung sebagai pengeluaran lagi.</p>
       </section>
       <section className="category-section">
         <div className="section-heading"><div><p className="eyebrow">PENGELOMPOKAN UANG</p><h2>Kategori transaksi</h2></div><button className="secondary-button" type="button" onClick={openNewCategory}><Plus size={15} /> Kategori</button></div>
@@ -452,6 +504,8 @@ export default function App() {
         <p className="backup-hint">File cadangan berisi dompet, kategori, transaksi, dan anggaran. File ini tidak dienkripsi; simpan di tempat pribadi.</p>
       </section>
       <footer>Rupia <span>•</span> Versi awal 0.2.0 <span>•</span> Data tersimpan lokal</footer>
+      {goalModalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGoalModalOpen(false) }}><section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="goal-modal-title"><div className="modal-heading"><div><p className="eyebrow">TARGET BARU</p><h2 id="goal-modal-title">Buat target tabungan</h2></div><button className="icon-button" type="button" onClick={() => setGoalModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div><form onSubmit={submitGoal}><label className="field-label" htmlFor="goal-name">Nama target</label><input id="goal-name" className="form-input" value={goalName} onChange={(event) => setGoalName(event.target.value)} maxLength={50} placeholder="Misalnya: Laptop baru" required /><label className="field-label" htmlFor="goal-target">Nominal target (Rp)</label><input id="goal-target" className="form-input amount-input" type="number" min="1" step="1" value={goalTarget} onChange={(event) => setGoalTarget(event.target.value)} placeholder="5000000" required /><label className="field-label" htmlFor="goal-deadline">Tenggat waktu <span>(opsional)</span></label><input id="goal-deadline" className="form-input" type="date" value={goalDeadline} onChange={(event) => setGoalDeadline(event.target.value)} />{goalError && <p className="form-error" role="alert">{goalError}</p>}<button className="save-button" type="submit" disabled={goalSaving}>{goalSaving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> Buat target</>}</button></form></section></div>}
+      {contributionGoalId && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContributionGoalId(null) }}><section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="contribution-modal-title"><div className="modal-heading"><div><p className="eyebrow">PROGRES TABUNGAN</p><h2 id="contribution-modal-title">Catat kontribusi</h2></div><button className="icon-button" type="button" onClick={() => setContributionGoalId(null)} aria-label="Tutup"><X size={20} /></button></div><form onSubmit={submitContribution}><label className="field-label" htmlFor="contribution-amount">Nominal (Rp)</label><input id="contribution-amount" className="form-input amount-input" type="number" min="1" step="1" value={contributionAmount} onChange={(event) => setContributionAmount(event.target.value)} placeholder="100000" required /><label className="field-label" htmlFor="contribution-date">Tanggal</label><input id="contribution-date" className="form-input" type="date" value={contributionDate} onChange={(event) => setContributionDate(event.target.value)} required /><label className="field-label" htmlFor="contribution-note">Catatan <span>(opsional)</span></label><input id="contribution-note" className="form-input" value={contributionNote} onChange={(event) => setContributionNote(event.target.value)} maxLength={100} placeholder="Misalnya: sisa uang bulanan" />{goalError && <p className="form-error" role="alert">{goalError}</p>}<button className="save-button" type="submit" disabled={goalSaving}>{goalSaving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> Simpan kontribusi</>}</button></form></section></div>}
       {categoryModalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCategoryModalOpen(false) }}><section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="category-modal-title"><div className="modal-heading"><div><p className="eyebrow">{categoryEditingId ? 'UBAH KATEGORI' : 'KATEGORI BARU'}</p><h2 id="category-modal-title">{categoryEditingId ? 'Edit kategori' : 'Tambah kategori'}</h2></div><button className="icon-button" type="button" onClick={() => setCategoryModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div><form onSubmit={submitCategory}><label className="field-label" htmlFor="category-name">Nama kategori</label><input id="category-name" className="form-input" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} maxLength={30} placeholder="Misalnya: Kesehatan" required />{!categoryEditingId && <><label className="field-label" htmlFor="category-type">Jenis kategori</label><select id="category-type" className="form-input" value={categoryType} onChange={(event) => setCategoryType(event.target.value as CategoryRecord['type'])}><option value="expense">Pengeluaran</option><option value="income">Pemasukan</option></select></>}{categoryError && <p className="form-error" role="alert">{categoryError}</p>}<button className="save-button" type="submit" disabled={categorySaving}>{categorySaving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> Simpan kategori</>}</button></form></section></div>}
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false) }}>
         <section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
