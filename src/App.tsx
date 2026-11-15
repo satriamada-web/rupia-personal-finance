@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction } from './core/finance'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup } from './core/finance'
 import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
@@ -27,6 +27,9 @@ export default function App() {
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
+  const [backupStatus, setBackupStatus] = useState('')
+  const [backupBusy, setBackupBusy] = useState(false)
+  const backupInputRef = useRef<HTMLInputElement>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [transactionWalletId, setTransactionWalletId] = useState('')
@@ -138,6 +141,39 @@ export default function App() {
     setSelectedDate(nextMonth + '-01')
   }
 
+
+  async function exportBackup() {
+    setBackupBusy(true); setBackupStatus('')
+    try {
+      const backup = await createFinanceBackup()
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'rupia-backup-' + today() + '.json'
+      document.body.appendChild(link); link.click(); link.remove()
+      URL.revokeObjectURL(url)
+      setBackupStatus('Cadangan berhasil dibuat. Simpan file JSON di tempat yang aman.')
+    } catch (cause) {
+      setBackupStatus(cause instanceof Error ? cause.message : 'Cadangan gagal dibuat.')
+    } finally { setBackupBusy(false) }
+  }
+
+  async function importBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setBackupBusy(true); setBackupStatus('')
+    try {
+      const parsed: unknown = JSON.parse(await file.text())
+      if (!window.confirm('Pulihkan cadangan ini? Seluruh data Rupia saat ini akan diganti dengan isi file. Sebaiknya ekspor cadangan data sekarang terlebih dahulu.')) return
+      await restoreFinanceBackup(parsed)
+      await refresh()
+      setBackupStatus('Data berhasil dipulihkan dari file cadangan.')
+    } catch (cause) {
+      setBackupStatus(cause instanceof Error ? cause.message : 'File cadangan tidak dapat dipulihkan.')
+    } finally { setBackupBusy(false) }
+  }
 
   async function submitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('')
@@ -334,6 +370,17 @@ export default function App() {
             })}
           </div>
         )}
+      </section>
+      <section className="backup-section">
+        <div className="section-heading"><div><p className="eyebrow">KEAMANAN DATA</p><h2>Backup &amp; Restore</h2></div></div>
+        <p className="backup-description">Simpan salinan data keuangan sebagai file JSON, lalu pulihkan kapan saja di perangkat lain.</p>
+        <div className="backup-actions">
+          <button type="button" className="backup-export" onClick={exportBackup} disabled={!ready || backupBusy}>{backupBusy ? 'Memproses…' : 'Ekspor cadangan'}</button>
+          <button type="button" className="backup-import" onClick={() => backupInputRef.current?.click()} disabled={!ready || backupBusy}>Pulihkan dari file</button>
+          <input ref={backupInputRef} className="backup-file-input" type="file" accept="application/json,.json" onChange={importBackup} />
+        </div>
+        {backupStatus && <p className="backup-status" role="status">{backupStatus}</p>}
+        <p className="backup-hint">File cadangan berisi dompet, kategori, transaksi, dan anggaran. File ini tidak dienkripsi; simpan di tempat pribadi.</p>
       </section>
       <footer>Rupia <span>•</span> Versi awal 0.2.0 <span>•</span> Data tersimpan lokal</footer>
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false) }}>
