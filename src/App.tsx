@@ -88,6 +88,16 @@ export default function App() {
   })
   const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
   const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
+  const safeMonth = currentMonth()
+  const safeBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
+    const budget = budgets.find((item) => item.month === safeMonth && item.categoryId === category.id)
+    const spent = transactions.filter((item) => item.type === 'expense' && item.categoryId === category.id && item.transactionDate.startsWith(safeMonth)).reduce((sum, item) => sum + item.amount, 0)
+    return { category, budget, spent, remaining: budget ? Math.max(0, budget.amount - spent) : 0 }
+  })
+  const configuredSafeBudgets = safeBudgetRows.filter((row) => row.budget)
+  const safeBudgetRemaining = configuredSafeBudgets.reduce((sum, row) => sum + row.remaining, 0)
+  const safeUnbudgetedExpenses = transactions.filter((item) => item.type === 'expense' && item.transactionDate.startsWith(safeMonth) && !safeBudgetRows.some((row) => row.category.id === item.categoryId && row.budget)).reduce((sum, item) => sum + item.amount, 0)
+  const safeToSpend = configuredSafeBudgets.length ? Math.min(Math.max(0, totalBalance), safeBudgetRemaining) : null
   const analyticsDate = new Date(analyticsMonth + '-01T12:00:00')
   const analyticsMonthLabel = analyticsDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
   const analyticsMonths = Array.from({ length: 6 }, (_, index) => {
@@ -282,6 +292,19 @@ export default function App() {
         <p className="balance-amount">{ready ? formatRupiah(totalBalance) : 'Memuat…'}</p>
         <p className="balance-note">{wallets.length ? `Dompet utama: ${wallets[0].name}` : 'Saldo tersimpan di perangkat ini.'}</p>
         <div className="balance-decoration" aria-hidden="true" />
+      </section>
+      <section className="safe-section" aria-labelledby="safe-title">
+        <div className="section-heading"><div><p className="eyebrow">BATAS BELANJA BULAN INI</p><h2 id="safe-title">Aman digunakan</h2></div><CheckCircle2 size={20} /></div>
+        {safeToSpend === null ? <div className="safe-empty"><strong>Atur anggaran terlebih dahulu</strong><p>Rupia perlu mengetahui batas pengeluaranmu agar bisa memperkirakan uang yang aman digunakan.</p></div> : <>
+          <p className="safe-amount">{formatRupiah(safeToSpend)}</p>
+          <p className="safe-caption">Perkiraan batas maksimal yang masih aman digunakan bulan ini.</p>
+          <div className="safe-breakdown">
+            <div><span>Sisa anggaran kategori</span><strong>{formatRupiah(safeBudgetRemaining)}</strong></div>
+            <div><span>Saldo seluruh dompet</span><strong>{formatRupiah(Math.max(0, totalBalance))}</strong></div>
+          </div>
+          {safeUnbudgetedExpenses > 0 && <p className="safe-warning">Perhatian: ada {formatRupiah(safeUnbudgetedExpenses)} pengeluaran pada kategori tanpa anggaran. Angka aman digunakan belum memperhitungkan batas untuk kategori tersebut.</p>}
+          {safeBudgetRemaining > Math.max(0, totalBalance) && <p className="safe-caption">Nilai dibatasi oleh saldo yang tersedia, bukan hanya sisa anggaran.</p>}
+        </>}
       </section>
       <section className="wallet-section">
         <div className="section-heading"><div><p className="eyebrow">TEMPAT PENYIMPANAN</p><h2>Dompetmu</h2></div><button className="secondary-button" type="button" onClick={() => { setError(''); setWalletModalOpen(true) }}><Plus size={15} /> Dompet</button></div>
