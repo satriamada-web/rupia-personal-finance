@@ -128,7 +128,7 @@ export async function setBudget(input: { period: BudgetPeriod; periodKey: string
   const category = await db.categories.get(input.categoryId)
   if (!category || category.type !== 'expense') throw new Error('Anggaran hanya dapat dibuat untuk kategori pengeluaran.')
   const legacyMonth = input.period === 'monthly' ? input.periodKey : input.periodKey.slice(0, 7)
-  const id = `budget-${input.period}-${input.periodKey}-${input.categoryId}`
+  const id = input.period === 'monthly' ? `budget-${input.periodKey}-${input.categoryId}` : `budget-${input.period}-${input.periodKey}-${input.categoryId}`
   if (input.amount === 0) {
     await db.budgets.delete(id)
     if (input.period === 'monthly') await db.budgets.delete(`budget-${input.periodKey}-${input.categoryId}`)
