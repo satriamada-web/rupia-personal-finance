@@ -103,3 +103,20 @@ footer { padding: 34px 0 5px; color: #9aa59d; text-align: center; font-size: 11p
 .transfer-amount { color: #6485a0; }
 .calendar-no-activity { margin: 12px 0 2px; color: #99a39b; font-size: 11px; text-align: center; }
 @media (max-width: 480px) { .calendar-section { padding: 14px; } .calendar-grid { gap: 3px; } .calendar-day { min-height: 39px; font-size: 10px; } .calendar-empty { min-height: 39px; } .calendar-summary strong { font-size: 11px; } }
+
+
+.history-filters { margin-top: 15px; padding: 13px; border: 1px solid #e8ede5; border-radius: 15px; background: #fff; }
+.history-search { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 0 11px; border: 1px solid #e1e8df; border-radius: 10px; color: #849087; background: #fbfcfa; }
+.history-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #34443a; background: transparent; font-size: 11px; }
+.history-filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.history-filter-grid label { display: grid; gap: 5px; min-width: 0; }
+.history-filter-grid label span { color: #829087; font-size: 10px; font-weight: 600; }
+.history-filter-grid select, .history-filter-grid input { width: 100%; min-width: 0; height: 38px; padding: 0 8px; border: 1px solid #e5ebe3; border-radius: 9px; outline: 0; color: #46574c; background: #fff; font-size: 10px; }
+.history-filter-grid select:focus, .history-filter-grid input:focus { border-color: #39815d; }
+.history-filter-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; color: #929d95; font-size: 10px; }
+.history-filter-footer button, .history-no-results button { padding: 6px 9px; border: 0; border-radius: 8px; color: #2e7354; background: #edf5ee; font-size: 10px; font-weight: 700; }
+.history-no-results { display: grid; justify-items: center; gap: 7px; margin-top: 12px; padding: 27px 15px; border: 1px dashed #dce5da; border-radius: 15px; color: #829087; background: #fff; text-align: center; }
+.history-no-results strong { color: #405147; font-size: 12px; }
+.history-no-results span { font-size: 10px; }
+.history-no-results button { margin-top: 5px; }
+@media (max-width: 380px) { .history-filter-grid { grid-template-columns: 1fr; } }
