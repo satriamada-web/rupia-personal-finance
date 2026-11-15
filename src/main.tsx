@@ -1,9 +1,10 @@
 import React from 'react'
+import { Capacitor } from '@capacitor/core'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles.css'
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+if (import.meta.env.PROD && !Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
       console.error('Rupia service worker registration failed:', error)
