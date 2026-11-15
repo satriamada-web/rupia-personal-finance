@@ -2,12 +2,16 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal, FileDown, FileText } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory, createSavingsGoal, updateSavingsGoal, addGoalContribution, updateGoalContribution, deleteGoalContribution, deleteSavingsGoal } from './core/finance'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory, createSavingsGoal, updateSavingsGoal, addGoalContribution, updateGoalContribution, deleteGoalContribution, deleteSavingsGoal } from './core/finance'
 import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord, SavingsGoalRecord, GoalContributionRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
+type BudgetPeriod = 'daily' | 'weekly' | 'monthly'
 const today = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10) }
 const currentMonth = () => today().slice(0, 7)
+const mondayOf = (date: string) => { const value = new Date(date + 'T12:00:00'); const day = (value.getDay() + 6) % 7; value.setDate(value.getDate() - day); return value.toISOString().slice(0, 10) }
+const periodKeyFor = (period: BudgetPeriod, date: string) => period === 'monthly' ? date.slice(0, 7) : period === 'weekly' ? mondayOf(date) : date
+const periodRange = (period: BudgetPeriod, key: string) => { if (period === 'monthly') return { from: key + '-01', to: new Date(Number(key.slice(0,4)), Number(key.slice(5,7)), 0, 12).toISOString().slice(0,10) }; if (period === 'weekly') { const start = new Date(key + 'T12:00:00'); const end = new Date(start); end.setDate(end.getDate()+6); return { from:key, to:end.toISOString().slice(0,10) } } return { from:key, to:key } }
 
 export default function App() {
   const [wallets, setWallets] = useState<WalletRecord[]>([])
@@ -28,7 +32,8 @@ export default function App() {
   const [contributionNote, setContributionNote] = useState('')
   const [goalError, setGoalError] = useState('')
   const [goalSaving, setGoalSaving] = useState(false)
-  const [budgetMonth, setBudgetMonth] = useState(currentMonth())
+  const [budgetPeriod, setBudgetPeriod] = useState<BudgetPeriod>('monthly')
+  const [budgetDate, setBudgetDate] = useState(today())
   const [analyticsMonth, setAnalyticsMonth] = useState(currentMonth())
   const [calendarMonth, setCalendarMonth] = useState(currentMonth())
   const [selectedDate, setSelectedDate] = useState(today())
@@ -108,17 +113,21 @@ export default function App() {
   const totalBalance = balances.reduce((sum, item) => sum + item.balance, 0)
   const totalIncome = transactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
   const totalExpense = transactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
-  const monthlyExpenses = transactions.filter((item) => item.type === 'expense' && item.transactionDate.startsWith(budgetMonth))
-  const monthlyBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
-    const budget = budgets.find((item) => item.month === budgetMonth && item.categoryId === category.id)
-    const spent = monthlyExpenses.filter((item) => item.categoryId === category.id).reduce((sum, item) => sum + item.amount, 0)
+  const selectedBudgetKey = periodKeyFor(budgetPeriod, budgetDate)
+  const selectedBudgetRange = periodRange(budgetPeriod, selectedBudgetKey)
+  const periodExpenses = transactions.filter((item) => item.type === 'expense' && item.transactionDate >= selectedBudgetRange.from && item.transactionDate <= selectedBudgetRange.to)
+  const selectedBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
+    const budget = budgets.find((item) => item.categoryId === category.id
+      && (item.period ?? 'monthly') === budgetPeriod
+      && (item.periodKey ?? item.month) === selectedBudgetKey)
+    const spent = periodExpenses.filter((item) => item.categoryId === category.id).reduce((sum, item) => sum + item.amount, 0)
     return { category, budget, spent, percent: budget ? Math.min(100, Math.round(spent / budget.amount * 100)) : 0 }
   })
-  const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
-  const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
+  const totalPeriodBudget = selectedBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
+  const totalPeriodSpent = periodExpenses.reduce((sum, item) => sum + item.amount, 0)
   const safeMonth = currentMonth()
   const safeBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
-    const budget = budgets.find((item) => item.month === safeMonth && item.categoryId === category.id)
+    const budget = budgets.find((item) => item.categoryId === category.id && (item.period ?? 'monthly') === 'monthly' && (item.periodKey ?? item.month) === safeMonth)
     const spent = transactions.filter((item) => item.type === 'expense' && item.categoryId === category.id && item.transactionDate.startsWith(safeMonth)).reduce((sum, item) => sum + item.amount, 0)
     return { category, budget, spent, remaining: budget ? Math.max(0, budget.amount - spent) : 0 }
   })
@@ -296,10 +305,10 @@ export default function App() {
   }
 
   async function saveBudget(categoryId: string) {
-    const existing = budgets.find((item) => item.month === budgetMonth && item.categoryId === categoryId)
+    const existing = budgets.find((item) => item.categoryId === categoryId && (item.period ?? 'monthly') === budgetPeriod && (item.periodKey ?? item.month) === selectedBudgetKey)
     const amountValue = Number(budgetDrafts[categoryId] ?? existing?.amount ?? 0)
     setBudgetSaving(categoryId); setError('')
-    try { await setMonthlyBudget({ month: budgetMonth, categoryId, amount: amountValue }); await refresh(); setBudgetDrafts((current) => { const next = { ...current }; delete next[categoryId]; return next }) }
+    try { await setBudget({ period: budgetPeriod, periodKey: selectedBudgetKey, categoryId, amount: amountValue }); await refresh(); setBudgetDrafts((current) => { const next = { ...current }; delete next[categoryId]; return next }) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Anggaran gagal disimpan.') }
     finally { setBudgetSaving(null) }
   }
@@ -525,18 +534,24 @@ export default function App() {
         </div>
       </section>
       <section className="budget-section">
-        <div className="section-heading"><div><p className="eyebrow">RENCANA PENGELUARAN</p><h2>Anggaran bulanan</h2></div></div>
-        <label className="field-label" htmlFor="budget-month">Periode anggaran</label>
-        <input id="budget-month" className="form-input budget-month" type="month" value={budgetMonth} onChange={(event) => { setBudgetMonth(event.target.value); setBudgetDrafts({}); setError('') }} />
-        <div className="budget-overview"><div><span>Terpakai bulan ini</span><strong>{formatRupiah(totalMonthlySpent)}</strong></div><div><span>Total anggaran</span><strong>{formatRupiah(totalMonthlyBudget)}</strong></div></div>
-        {monthlyBudgetRows.map(({ category, budget, spent, percent }) => <div className="budget-row" key={category.id}>
+        <div className="section-heading"><div><p className="eyebrow">RENCANA PENGELUARAN</p><h2>Anggaran fleksibel</h2></div></div>
+        <p className="budget-hint">Catat transaksi kapan saja. Rupia menjumlahkan pengeluaran harian berdasarkan kategori dan periode yang kamu pilih.</p>
+        <label className="field-label" htmlFor="budget-period">Periode anggaran</label>
+        <select id="budget-period" className="form-input" value={budgetPeriod} onChange={(event) => { setBudgetPeriod(event.target.value as BudgetPeriod); setBudgetDrafts({}); setError('') }}>
+          <option value="daily">Harian</option><option value="weekly">Mingguan (Senin–Minggu)</option><option value="monthly">Bulanan</option>
+        </select>
+        <label className="field-label" htmlFor="budget-date">{budgetPeriod === 'monthly' ? 'Pilih bulan' : budgetPeriod === 'weekly' ? 'Pilih salah satu tanggal dalam minggu' : 'Pilih tanggal'}</label>
+        <input id="budget-date" className="form-input budget-month" type={budgetPeriod === 'monthly' ? 'month' : 'date'} value={budgetPeriod === 'monthly' ? selectedBudgetKey : budgetDate} onChange={(event) => { setBudgetDate(budgetPeriod === 'monthly' ? event.target.value + '-15' : event.target.value); setBudgetDrafts({}); setError('') }} />
+        <p className="budget-hint">{budgetPeriod === 'weekly' ? 'Periode yang dihitung: ' + selectedBudgetRange.from + ' sampai ' + selectedBudgetRange.to : budgetPeriod === 'daily' ? 'Pengeluaran yang dihitung hanya pada tanggal terpilih.' : 'Pengeluaran yang dihitung dari tanggal 1 sampai akhir bulan.'}</p>
+        <div className="budget-overview"><div><span>Total pengeluaran periode</span><strong>{formatRupiah(totalPeriodSpent)}</strong></div><div><span>Total batas anggaran</span><strong>{formatRupiah(totalPeriodBudget)}</strong></div></div>
+        {selectedBudgetRows.map(({ category, budget, spent, percent }) => <div className="budget-row" key={category.id}>
           <div className="budget-row-heading"><strong>{category.name}</strong><span>{budget ? formatRupiah(spent) + ' / ' + formatRupiah(budget.amount) : formatRupiah(spent) + ' terpakai'}</span></div>
           {budget && <div className="budget-track"><div className={spent > budget.amount ? 'budget-fill over' : 'budget-fill'} style={{ width: percent + '%' }} /></div>}
-          <div className="budget-edit"><input className="form-input" type="number" min="0" step="1" inputMode="numeric" aria-label={"Anggaran kategori " + category.name} placeholder="Atur batas anggaran (Rp)" value={budgetDrafts[category.id] ?? (budget ? String(budget.amount) : '')} onChange={(event) => setBudgetDrafts((current) => ({ ...current, [category.id]: event.target.value }))} /><button type="button" className="budget-save" disabled={budgetSaving === category.id} onClick={() => saveBudget(category.id)}>{budgetSaving === category.id ? '…' : 'Simpan'}</button></div>
+          <div className="budget-edit"><input className="form-input" type="number" min="0" step="1" inputMode="numeric" aria-label={"Batas anggaran " + category.name} placeholder="Atur batas anggaran (Rp)" value={budgetDrafts[category.id] ?? (budget ? String(budget.amount) : '')} onChange={(event) => setBudgetDrafts((current) => ({ ...current, [category.id]: event.target.value }))} /><button type="button" className="budget-save" disabled={budgetSaving === category.id} onClick={() => saveBudget(category.id)}>{budgetSaving === category.id ? '…' : 'Simpan'}</button></div>
           {budget && <p className={spent > budget.amount ? 'budget-status over' : 'budget-status'}>{spent > budget.amount ? 'Melebihi anggaran ' + formatRupiah(spent - budget.amount) : 'Sisa ' + formatRupiah(budget.amount - spent) + ' · ' + percent + '% terpakai'}</p>}
         </div>)}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <p className="budget-hint">Isi nominal batas pengeluaran per kategori. Masukkan 0 lalu simpan untuk menghapus anggaran.</p>
+        <p className="budget-hint">Setiap kategori punya batas terpisah. Masukkan 0 lalu simpan untuk menghapus anggaran periode ini. Anggaran lama bulanan tetap dipertahankan.</p>
       </section>
       <section className="transaction-section">
         <div className="section-heading">
