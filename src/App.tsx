@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
 import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction } from './core/finance'
@@ -17,6 +17,12 @@ export default function App() {
   const [budgetMonth, setBudgetMonth] = useState(currentMonth())
   const [calendarMonth, setCalendarMonth] = useState(currentMonth())
   const [selectedDate, setSelectedDate] = useState(today())
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyType, setHistoryType] = useState('all')
+  const [historyCategory, setHistoryCategory] = useState('all')
+  const [historyWallet, setHistoryWallet] = useState('all')
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -72,6 +78,24 @@ export default function App() {
   })
   const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
   const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
+  const filteredTransactions = transactions.filter((item) => {
+    const category = categories.find((entry) => entry.id === item.categoryId)
+    const source = wallets.find((entry) => entry.id === item.walletId)
+    const destination = wallets.find((entry) => entry.id === item.destinationWalletId)
+    const query = historySearch.trim().toLocaleLowerCase('id-ID')
+    const searchable = [item.note, category?.name, source?.name, destination?.name, item.type].filter(Boolean).join(' ').toLocaleLowerCase('id-ID')
+    return (historyType === 'all' || item.type === historyType)
+      && (historyCategory === 'all' || item.categoryId === historyCategory)
+      && (historyWallet === 'all' || item.walletId === historyWallet || item.destinationWalletId === historyWallet)
+      && (!historyFrom || item.transactionDate >= historyFrom)
+      && (!historyTo || item.transactionDate <= historyTo)
+      && (!query || searchable.includes(query))
+  })
+  const hasActiveHistoryFilter = Boolean(historySearch || historyType !== 'all' || historyCategory !== 'all' || historyWallet !== 'all' || historyFrom || historyTo)
+  function resetHistoryFilters() {
+    setHistorySearch(''); setHistoryType('all'); setHistoryCategory('all'); setHistoryWallet('all'); setHistoryFrom(''); setHistoryTo('')
+  }
+
   const calendarDate = new Date(calendarMonth + '-01T12:00:00')
   const calendarDaysCount = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate()
   const calendarStartOffset = calendarDate.getDay()
@@ -220,18 +244,32 @@ export default function App() {
       </section>
       <section className="transaction-section">
         <div className="section-heading">
-          <div><p className="eyebrow">AKTIVITAS</p><h2>Transaksi terbaru</h2></div>
+          <div><p className="eyebrow">CATATAN KEUANGAN</p><h2>Riwayat transaksi</h2></div>
           <button className="primary-button" type="button" onClick={openNewTransaction} disabled={!ready}><Plus size={17} /> Catat</button>
         </div>
+
+        {transactions.length > 0 && <div className="history-filters">
+          <div className="history-search"><Search size={17} /><input aria-label="Cari transaksi" placeholder="Cari catatan, kategori, atau dompet..." value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} /><SlidersHorizontal size={16} /></div>
+          <div className="history-filter-grid">
+            <label><span>Jenis</span><select value={historyType} onChange={(event) => { setHistoryType(event.target.value); if (event.target.value === 'transfer') setHistoryCategory('all') }}><option value="all">Semua jenis</option><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option><option value="transfer">Transfer</option></select></label>
+            <label><span>Kategori</span><select value={historyCategory} onChange={(event) => setHistoryCategory(event.target.value)}><option value="all">Semua kategori</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label><span>Dompet</span><select value={historyWallet} onChange={(event) => setHistoryWallet(event.target.value)}><option value="all">Semua dompet</option>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label><span>Dari tanggal</span><input type="date" value={historyFrom} max={historyTo || undefined} onChange={(event) => setHistoryFrom(event.target.value)} /></label>
+            <label><span>Sampai tanggal</span><input type="date" value={historyTo} min={historyFrom || undefined} onChange={(event) => setHistoryTo(event.target.value)} /></label>
+          </div>
+          <div className="history-filter-footer"><span>{filteredTransactions.length} dari {transactions.length} transaksi</span>{hasActiveHistoryFilter && <button type="button" onClick={resetHistoryFilters}>Hapus filter</button>}</div>
+        </div>}
         {transactions.length === 0 ? (
           <div className="empty-state">
             <div className="first-step-icon"><BarChart3 size={22} /></div><h3>Belum ada transaksi</h3>
             <p>Catat pemasukan atau pengeluaran pertamamu untuk mulai melihat arus uang.</p>
             <button className="text-button" type="button" onClick={openNewTransaction} disabled={!ready}>+ Tambah transaksi pertama</button>
           </div>
+        ) : filteredTransactions.length === 0 ? (
+          <div className="history-no-results"><Search size={20} /><strong>Tidak ada transaksi yang cocok</strong><span>Coba ubah kata kunci atau filter pencarian.</span><button type="button" onClick={resetHistoryFilters}>Reset pencarian</button></div>
         ) : (
           <div className="transaction-list">
-            {transactions.slice(0, 12).map((transaction) => {
+            {filteredTransactions.map((transaction) => {
               const category = categories.find((item) => item.id === transaction.categoryId)
               const income = transaction.type === 'income'
               const transfer = transaction.type === 'transfer'
