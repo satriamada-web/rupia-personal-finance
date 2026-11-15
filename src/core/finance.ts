@@ -229,7 +229,7 @@ function validateBackup(value: unknown): FinanceBackup {
 
 export async function restoreFinanceBackup(value: unknown): Promise<void> {
   const backup = validateBackup(value)
-  await db.transaction('rw', db.wallets, db.categories, db.transactions, db.budgets, db.savingsGoals, db.goalContributions, async () => {
+  await db.transaction('rw', [db.wallets, db.categories, db.transactions, db.budgets, db.savingsGoals, db.goalContributions], async () => {
     await Promise.all([db.wallets.clear(), db.categories.clear(), db.transactions.clear(), db.budgets.clear(), db.savingsGoals.clear(), db.goalContributions.clear()])
     await db.wallets.bulkPut(backup.data.wallets)
     await db.categories.bulkPut(backup.data.categories)
