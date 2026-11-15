@@ -58,3 +58,26 @@ export async function getFinanceSnapshot() {
   ])
   return { wallets, categories, transactions: transactions.filter((item) => !item.deletedAt) }
 }
+
+export async function updateTransaction(id: string, input: NewTransaction): Promise<void> {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new Error('Masukkan nominal lebih dari nol dalam Rupiah bulat.')
+  if (!input.transactionDate || Number.isNaN(Date.parse(input.transactionDate))) throw new Error('Tanggal transaksi tidak valid.')
+  const [existing, wallet, category] = await Promise.all([
+    db.transactions.get(id), db.wallets.get(input.walletId), db.categories.get(input.categoryId),
+  ])
+  if (!existing || existing.deletedAt) throw new Error('Transaksi tidak ditemukan atau sudah dihapus.')
+  if (!wallet) throw new Error('Dompet tidak ditemukan.')
+  if (!category || category.type !== input.type) throw new Error('Kategori tidak sesuai dengan jenis transaksi.')
+  await db.transactions.update(id, {
+    type: input.type, amount: input.amount, walletId: input.walletId,
+    categoryId: input.categoryId, transactionDate: input.transactionDate,
+    note: input.note.trim(), updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  const existing = await db.transactions.get(id)
+  if (!existing || existing.deletedAt) throw new Error('Transaksi tidak ditemukan atau sudah dihapus.')
+  const now = new Date().toISOString()
+  await db.transactions.update(id, { deletedAt: now, updatedAt: now })
+}
