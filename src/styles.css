@@ -233,3 +233,7 @@ footer { padding: 34px 0 5px; color: #9aa59d; text-align: center; font-size: 11p
 .goal-history-actions { display: flex; gap: 5px; flex-shrink: 0; }
 .goal-history-actions button { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #e3eae1; border-radius: 7px; color: #718276; background: #fff; }
 .goal-history-actions button:last-child { color: #b66a60; }
+
+.goal-heading-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.goal-heading-actions .row-action { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #e3eae1; border-radius: 7px; color: #718276; background: #fff; }
+.goal-heading-actions .delete-action { color: #b66a60; }
