@@ -219,3 +219,41 @@ export async function restoreFinanceBackup(value: unknown): Promise<void> {
     await db.budgets.bulkPut(backup.data.budgets)
   })
 }
+
+
+export async function createCategory(input: { name: string; type: CategoryRecord['type'] }): Promise<void> {
+  const name = input.name.trim()
+  if (!name) throw new Error('Nama kategori wajib diisi.')
+  if (name.length > 30) throw new Error('Nama kategori maksimal 30 karakter.')
+  const duplicate = await db.categories.filter((item) => item.type === input.type && item.name.toLocaleLowerCase('id-ID') === name.toLocaleLowerCase('id-ID')).first()
+  if (duplicate) throw new Error('Kategori dengan nama tersebut sudah ada.')
+  await db.categories.add({
+    id: makeId(), name, type: input.type, icon: input.type === 'income' ? 'plus-circle' : 'tag',
+    color: input.type === 'income' ? '#39815d' : '#c17a51', isDefault: false,
+    createdAt: new Date().toISOString(),
+  })
+}
+
+export async function updateCategory(id: string, nameInput: string): Promise<void> {
+  const name = nameInput.trim()
+  if (!name) throw new Error('Nama kategori wajib diisi.')
+  if (name.length > 30) throw new Error('Nama kategori maksimal 30 karakter.')
+  const category = await db.categories.get(id)
+  if (!category) throw new Error('Kategori tidak ditemukan.')
+  if (category.isDefault) throw new Error('Kategori bawaan tidak dapat diubah.')
+  const duplicate = await db.categories.filter((item) => item.id !== id && item.type === category.type && item.name.toLocaleLowerCase('id-ID') === name.toLocaleLowerCase('id-ID')).first()
+  if (duplicate) throw new Error('Kategori dengan nama tersebut sudah ada.')
+  await db.categories.update(id, { name })
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const category = await db.categories.get(id)
+  if (!category) throw new Error('Kategori tidak ditemukan.')
+  if (category.isDefault) throw new Error('Kategori bawaan tidak dapat dihapus.')
+  const [transactionCount, budgetCount] = await Promise.all([
+    db.transactions.where('categoryId').equals(id).count(),
+    db.budgets.where('categoryId').equals(id).count(),
+  ])
+  if (transactionCount || budgetCount) throw new Error('Kategori sudah digunakan. Hapus atau ubah transaksi dan anggarannya terlebih dahulu.')
+  await db.categories.delete(id)
+}
