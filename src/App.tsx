@@ -15,6 +15,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [budgets, setBudgets] = useState<BudgetRecord[]>([])
   const [budgetMonth, setBudgetMonth] = useState(currentMonth())
+  const [analyticsMonth, setAnalyticsMonth] = useState(currentMonth())
   const [calendarMonth, setCalendarMonth] = useState(currentMonth())
   const [selectedDate, setSelectedDate] = useState(today())
   const [historySearch, setHistorySearch] = useState('')
@@ -78,6 +79,31 @@ export default function App() {
   })
   const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
   const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
+  const analyticsDate = new Date(analyticsMonth + '-01T12:00:00')
+  const analyticsMonthLabel = analyticsDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  const analyticsMonths = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(analyticsDate.getFullYear(), analyticsDate.getMonth() - 5 + index, 1, 12)
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0')
+  })
+  const analyticsTotals = analyticsMonths.map((month) => ({
+    month,
+    income: transactions.filter((item) => item.type === 'income' && item.transactionDate.startsWith(month)).reduce((sum, item) => sum + item.amount, 0),
+    expense: transactions.filter((item) => item.type === 'expense' && item.transactionDate.startsWith(month)).reduce((sum, item) => sum + item.amount, 0),
+  }))
+  const selectedAnalytics = analyticsTotals.find((item) => item.month === analyticsMonth) ?? { month: analyticsMonth, income: 0, expense: 0 }
+  const previousAnalyticsDate = new Date(analyticsDate.getFullYear(), analyticsDate.getMonth() - 1, 1, 12)
+  const previousAnalyticsMonth = previousAnalyticsDate.getFullYear() + '-' + String(previousAnalyticsDate.getMonth() + 1).padStart(2, '0')
+  const previousAnalytics = transactions.filter((item) => item.transactionDate.startsWith(previousAnalyticsMonth))
+  const previousExpense = previousAnalytics.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
+  const previousIncome = previousAnalytics.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
+  const expenseChange = previousExpense ? Math.round((selectedAnalytics.expense - previousExpense) / previousExpense * 100) : null
+  const incomeChange = previousIncome ? Math.round((selectedAnalytics.income - previousIncome) / previousIncome * 100) : null
+  const expenseByCategory = categories.filter((category) => category.type === 'expense').map((category) => ({
+    category,
+    amount: transactions.filter((item) => item.type === 'expense' && item.categoryId === category.id && item.transactionDate.startsWith(analyticsMonth)).reduce((sum, item) => sum + item.amount, 0),
+  })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount)
+  const maxAnalyticsValue = Math.max(1, ...analyticsTotals.flatMap((item) => [item.income, item.expense]))
+
   const filteredTransactions = transactions.filter((item) => {
     const category = categories.find((entry) => entry.id === item.categoryId)
     const source = wallets.find((entry) => entry.id === item.walletId)
@@ -199,6 +225,32 @@ export default function App() {
         <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight size={18} /></div><span>Pengeluaran tercatat</span><strong>{formatRupiah(totalExpense)}</strong></article>
       </section>
 
+      <section className="analytics-section">
+        <div className="section-heading"><div><p className="eyebrow">POLA KEUANGAN</p><h2>Analisis keuangan</h2></div><BarChart3 size={20} /></div>
+        <label className="field-label" htmlFor="analytics-month">Periode analisis</label>
+        <input id="analytics-month" className="form-input analytics-month" type="month" value={analyticsMonth} onChange={(event) => setAnalyticsMonth(event.target.value)} />
+        <div className="analytics-kpis">
+          <article><span>Pemasukan</span><strong className="amount-income">{formatRupiah(selectedAnalytics.income)}</strong><small>{incomeChange === null ? 'Belum ada data pembanding' : (incomeChange > 0 ? '+' : '') + incomeChange + '% dari bulan lalu'}</small></article>
+          <article><span>Pengeluaran</span><strong className="amount-expense">{formatRupiah(selectedAnalytics.expense)}</strong><small>{expenseChange === null ? 'Belum ada data pembanding' : (expenseChange > 0 ? '+' : '') + expenseChange + '% dari bulan lalu'}</small></article>
+        </div>
+        <div className="analytics-net"><span>Selisih pemasukan - pengeluaran</span><strong className={selectedAnalytics.income - selectedAnalytics.expense >= 0 ? 'amount-income' : 'amount-expense'}>{formatRupiah(selectedAnalytics.income - selectedAnalytics.expense)}</strong></div>
+        <div className="analytics-chart-heading"><strong>Tren 6 bulan</strong><span>Perbandingan pemasukan dan pengeluaran</span></div>
+        <div className="analytics-chart">
+          {analyticsTotals.map((item) => <div className="analytics-chart-column" key={item.month}>
+            <div className="analytics-bars">
+              <i className="analytics-bar income-bar" style={{ height: Math.max(item.income ? 4 : 0, item.income / maxAnalyticsValue * 100) + '%' }} title={'Pemasukan ' + formatRupiah(item.income)} />
+              <i className="analytics-bar expense-bar" style={{ height: Math.max(item.expense ? 4 : 0, item.expense / maxAnalyticsValue * 100) + '%' }} title={'Pengeluaran ' + formatRupiah(item.expense)} />
+            </div>
+            <span>{new Date(item.month + '-01T12:00:00').toLocaleDateString('id-ID', { month: 'short' })}</span>
+          </div>)}
+        </div>
+        <div className="analytics-legend"><span><i className="income-bar" /> Pemasukan</span><span><i className="expense-bar" /> Pengeluaran</span></div>
+        <div className="analytics-category-heading"><strong>Pengeluaran per kategori</strong><span>{analyticsMonthLabel}</span></div>
+        {expenseByCategory.length ? expenseByCategory.map(({ category, amount: categoryAmount }) => <div className="analytics-category" key={category.id}>
+          <div><strong>{category.name}</strong><span>{formatRupiah(categoryAmount)} · {Math.round(categoryAmount / Math.max(1, selectedAnalytics.expense) * 100)}%</span></div>
+          <div className="analytics-category-track"><i style={{ width: (categoryAmount / Math.max(1, selectedAnalytics.expense) * 100) + '%' }} /></div>
+        </div>) : <p className="analytics-empty">Belum ada pengeluaran pada periode ini.</p>}
+      </section>
       <section className="calendar-section">
         <div className="section-heading"><div><p className="eyebrow">ARUS KAS HARIAN</p><h2>Kalender keuangan</h2></div><div className="calendar-nav"><button type="button" aria-label="Bulan sebelumnya" onClick={() => shiftCalendarMonth(-1)}><ChevronLeft size={18} /></button><button type="button" aria-label="Bulan berikutnya" onClick={() => shiftCalendarMonth(1)}><ChevronRight size={18} /></button></div></div>
         <div className="calendar-month-label">{monthLabel}</div>
