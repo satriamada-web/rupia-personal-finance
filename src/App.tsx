@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal, FileDown, FileText } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
 import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory, createSavingsGoal, updateSavingsGoal, addGoalContribution, updateGoalContribution, deleteGoalContribution, deleteSavingsGoal } from './core/finance'
@@ -47,6 +47,9 @@ export default function App() {
   const [categoryEditingId, setCategoryEditingId] = useState<string | null>(null)
   const [categoryError, setCategoryError] = useState('')
   const [categorySaving, setCategorySaving] = useState(false)
+  const [reportFrom, setReportFrom] = useState(currentMonth() + '-01')
+  const [reportTo, setReportTo] = useState(today())
+  const [reportStatus, setReportStatus] = useState('')
   const [backupStatus, setBackupStatus] = useState('')
   const [backupBusy, setBackupBusy] = useState(false)
   const backupInputRef = useRef<HTMLInputElement>(null)
@@ -171,6 +174,55 @@ export default function App() {
     setSelectedDate(nextMonth + '-01')
   }
 
+
+  function getReportData() {
+    const rows = transactions.filter((item) => item.transactionDate >= reportFrom && item.transactionDate <= reportTo)
+      .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate) || a.createdAt.localeCompare(b.createdAt))
+    const income = rows.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
+    const expense = rows.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
+    return { rows, income, expense, net: income - expense }
+  }
+
+  function exportReportCsv() {
+    if (reportFrom > reportTo) { setReportStatus('Tanggal awal tidak boleh melewati tanggal akhir.'); return }
+    const report = getReportData()
+    const quote = (value: string | number) => '"' + String(value).replace(/"/g, '""') + '"'
+    const lines = [
+      ['Tanggal', 'Jenis', 'Nominal (Rp)', 'Kategori', 'Dompet asal', 'Dompet tujuan', 'Catatan'].map(quote).join(','),
+      ...report.rows.map((item) => {
+        const category = categories.find((entry) => entry.id === item.categoryId)?.name ?? (item.type === 'transfer' ? 'Transfer' : '-')
+        const source = wallets.find((entry) => entry.id === item.walletId)?.name ?? '-'
+        const destination = wallets.find((entry) => entry.id === item.destinationWalletId)?.name ?? '-'
+        const kind = item.type === 'income' ? 'Pemasukan' : item.type === 'expense' ? 'Pengeluaran' : 'Transfer'
+        return [item.transactionDate, kind, item.amount, category, source, destination, item.note].map(quote).join(',')
+      }),
+    ]
+    const blob = new Blob(['\\uFEFF' + lines.join('\\r\\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url; link.download = 'rupia-laporan-' + reportFrom + '-sampai-' + reportTo + '.csv'
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+    setReportStatus('Laporan CSV berhasil diekspor (' + report.rows.length + ' transaksi).')
+  }
+
+  function exportReportPdf() {
+    if (reportFrom > reportTo) { setReportStatus('Tanggal awal tidak boleh melewati tanggal akhir.'); return }
+    const report = getReportData()
+    const escapeHtml = (value: string | number) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char)
+    const money = (value: number) => 'Rp ' + new Intl.NumberFormat('id-ID').format(value)
+    const body = report.rows.map((item) => {
+      const category = categories.find((entry) => entry.id === item.categoryId)?.name ?? (item.type === 'transfer' ? 'Transfer' : '-')
+      const source = wallets.find((entry) => entry.id === item.walletId)?.name ?? '-'
+      const destination = wallets.find((entry) => entry.id === item.destinationWalletId)?.name ?? '-'
+      const kind = item.type === 'income' ? 'Pemasukan' : item.type === 'expense' ? 'Pengeluaran' : 'Transfer'
+      return '<tr><td>' + escapeHtml(item.transactionDate) + '</td><td>' + kind + '</td><td class="number">' + escapeHtml(money(item.amount)) + '</td><td>' + escapeHtml(category) + '</td><td>' + escapeHtml(source) + (item.type === 'transfer' ? ' → ' + escapeHtml(destination) : '') + '</td><td>' + escapeHtml(item.note || '-') + '</td></tr>'
+    }).join('')
+    const popup = window.open('', '_blank')
+    if (!popup) { setReportStatus('Jendela laporan diblokir. Izinkan pop-up untuk Rupia, lalu coba lagi.'); return }
+    popup.document.write('<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Keuangan Rupia</title><style>body{font:12px Arial,sans-serif;color:#26352d;padding:28px}h1{margin:0 0 6px;font-size:22px}.muted{color:#68776d}.summary{display:flex;gap:24px;margin:22px 0}.summary div{border:1px solid #dce5dc;border-radius:8px;padding:12px;flex:1}.summary b{display:block;font-size:16px;margin-top:6px}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px;border-bottom:1px solid #e3e9e3;text-align:left;vertical-align:top}th{background:#f2f6f1}.number{text-align:right;white-space:nowrap}.empty{padding:24px;text-align:center;color:#68776d}@media print{body{padding:0}@page{size:landscape;margin:14mm}}</style></head><body><h1>Rupia — Laporan Keuangan</h1><p class="muted">Periode ' + escapeHtml(reportFrom) + ' sampai ' + escapeHtml(reportTo) + '</p><div class="summary"><div>Pemasukan<b>' + escapeHtml(money(report.income)) + '</b></div><div>Pengeluaran<b>' + escapeHtml(money(report.expense)) + '</b></div><div>Selisih<b>' + escapeHtml(money(report.net)) + '</b></div></div><h2>Rincian transaksi</h2>' + (report.rows.length ? '<table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Nominal</th><th>Kategori</th><th>Dompet</th><th>Catatan</th></tr></thead><tbody>' + body + '</tbody></table>' : '<p class="empty">Tidak ada transaksi pada periode ini.</p>') + '<script>window.onload=()=>window.print()<\\/script></body></html>')
+    popup.document.close()
+    setReportStatus('Laporan siap dicetak. Pilih “Save as PDF” pada dialog cetak.')
+  }
 
   async function exportBackup() {
     setBackupBusy(true); setBackupStatus('')
@@ -514,6 +566,17 @@ export default function App() {
             })}
           </div>
         )}
+      </section>
+      <section className="report-section">
+        <div className="section-heading"><div><p className="eyebrow">RINGKASAN & ARSIP</p><h2>Laporan keuangan</h2></div><FileText size={20} /></div>
+        <p className="backup-description">Ekspor transaksi pada rentang tanggal pilihan. PDF dibuat melalui fitur cetak perangkat.</p>
+        <div className="report-range">
+          <label className="field-label" htmlFor="report-from">Dari tanggal</label><input id="report-from" className="form-input" type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} />
+          <label className="field-label" htmlFor="report-to">Sampai tanggal</label><input id="report-to" className="form-input" type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} />
+        </div>
+        <div className="backup-actions"><button type="button" className="backup-export" onClick={exportReportCsv} disabled={!ready}><FileDown size={16} /> Ekspor CSV</button><button type="button" className="backup-import" onClick={exportReportPdf} disabled={!ready}><FileText size={16} /> Cetak / PDF</button></div>
+        {reportStatus && <p className="backup-status" role="status">{reportStatus}</p>}
+        <p className="backup-hint">CSV dapat dibuka di Excel atau Google Sheets. Untuk PDF, pilih “Save as PDF” setelah jendela cetak terbuka. Transfer dicantumkan tetapi tidak dihitung sebagai pemasukan atau pengeluaran.</p>
       </section>
       <section className="backup-section">
         <div className="section-heading"><div><p className="eyebrow">KEAMANAN DATA</p><h2>Backup &amp; Restore</h2></div></div>
