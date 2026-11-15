@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup } from './core/finance'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory } from './core/finance'
 import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
@@ -27,6 +27,12 @@ export default function App() {
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false)
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryType, setCategoryType] = useState<CategoryRecord['type']>('expense')
+  const [categoryEditingId, setCategoryEditingId] = useState<string | null>(null)
+  const [categoryError, setCategoryError] = useState('')
+  const [categorySaving, setCategorySaving] = useState(false)
   const [backupStatus, setBackupStatus] = useState('')
   const [backupBusy, setBackupBusy] = useState(false)
   const backupInputRef = useRef<HTMLInputElement>(null)
@@ -210,6 +216,32 @@ export default function App() {
     finally { setBudgetSaving(null) }
   }
 
+  function openNewCategory() {
+    setCategoryEditingId(null); setCategoryName(''); setCategoryType('expense'); setCategoryError(''); setCategoryModalOpen(true)
+  }
+
+  function openEditCategory(category: CategoryRecord) {
+    setCategoryEditingId(category.id); setCategoryName(category.name); setCategoryType(category.type); setCategoryError(''); setCategoryModalOpen(true)
+  }
+
+  async function submitCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setCategoryError(''); setCategorySaving(true)
+    try {
+      if (categoryEditingId) await updateCategory(categoryEditingId, categoryName)
+      else await createCategory({ name: categoryName, type: categoryType })
+      await refresh(); setCategoryModalOpen(false)
+    } catch (cause) {
+      setCategoryError(cause instanceof Error ? cause.message : 'Kategori gagal disimpan.')
+    } finally { setCategorySaving(false) }
+  }
+
+  async function handleDeleteCategory(category: CategoryRecord) {
+    if (!window.confirm('Hapus kategori "' + category.name + '"? Kategori bawaan tidak dapat dihapus.')) return
+    setCategoryError('')
+    try { await deleteCategory(category.id); await refresh() }
+    catch (cause) { setCategoryError(cause instanceof Error ? cause.message : 'Kategori gagal dihapus.') }
+  }
+
   async function submitWallet(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('')
     const balance = Number(openingBalance)
@@ -255,6 +287,20 @@ export default function App() {
         <div className="section-heading"><div><p className="eyebrow">TEMPAT PENYIMPANAN</p><h2>Dompetmu</h2></div><button className="secondary-button" type="button" onClick={() => { setError(''); setWalletModalOpen(true) }}><Plus size={15} /> Dompet</button></div>
         <div className="wallet-list">{wallets.map((wallet) => { const balance = balances.find((item) => item.walletId === wallet.id)?.balance ?? wallet.openingBalance; return <article className="wallet-item" key={wallet.id}><div className="wallet-item-icon"><Wallet size={17} /></div><div><strong>{wallet.name}</strong><span>{wallet.type === 'cash' ? 'Tunai' : wallet.type === 'bank' ? 'Rekening bank' : wallet.type === 'ewallet' ? 'E-wallet' : 'Lainnya'}</span></div><b>{formatRupiah(balance)}</b></article> })}</div>
         <button className="transfer-button" type="button" onClick={() => { setError(''); setTransferFrom(wallets[0]?.id ?? ''); setTransferTo(wallets[1]?.id ?? ''); setTransferModalOpen(true) }} disabled={wallets.length < 2}><ArrowLeftRight size={16} /> Transfer antar-dompet</button>
+      </section>
+      <section className="category-section">
+        <div className="section-heading"><div><p className="eyebrow">PENGELOMPOKAN UANG</p><h2>Kategori transaksi</h2></div><button className="secondary-button" type="button" onClick={openNewCategory}><Plus size={15} /> Kategori</button></div>
+        <p className="category-description">Buat kategori sesuai kebutuhanmu. Kategori bawaan tetap tersedia untuk menjaga data lama.</p>
+        <div className="category-groups">
+          {(['expense', 'income'] as const).map((kind) => <div className="category-group" key={kind}>
+            <strong className="category-group-title">{kind === 'expense' ? 'Pengeluaran' : 'Pemasukan'}</strong>
+            {categories.filter((item) => item.type === kind).map((category) => <div className="category-manage-row" key={category.id}>
+              <div><span className={'category-type-dot ' + kind} /><strong>{category.name}</strong>{category.isDefault && <small>Bawaan</small>}</div>
+              {!category.isDefault && <span className="category-manage-actions"><button type="button" aria-label={'Ubah kategori ' + category.name} onClick={() => openEditCategory(category)}><Pencil size={14} /></button><button type="button" aria-label={'Hapus kategori ' + category.name} onClick={() => handleDeleteCategory(category)}><Trash2 size={14} /></button></span>}
+            </div>)}
+          </div>)}
+        </div>
+        {categoryError && !categoryModalOpen && <p className="form-error" role="alert">{categoryError}</p>}
       </section>
       <section className="summary-grid" aria-label="Ringkasan keuangan">
         <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft size={18} /></div><span>Pemasukan tercatat</span><strong>{formatRupiah(totalIncome)}</strong></article>
@@ -383,6 +429,7 @@ export default function App() {
         <p className="backup-hint">File cadangan berisi dompet, kategori, transaksi, dan anggaran. File ini tidak dienkripsi; simpan di tempat pribadi.</p>
       </section>
       <footer>Rupia <span>•</span> Versi awal 0.2.0 <span>•</span> Data tersimpan lokal</footer>
+      {categoryModalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCategoryModalOpen(false) }}><section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="category-modal-title"><div className="modal-heading"><div><p className="eyebrow">{categoryEditingId ? 'UBAH KATEGORI' : 'KATEGORI BARU'}</p><h2 id="category-modal-title">{categoryEditingId ? 'Edit kategori' : 'Tambah kategori'}</h2></div><button className="icon-button" type="button" onClick={() => setCategoryModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div><form onSubmit={submitCategory}><label className="field-label" htmlFor="category-name">Nama kategori</label><input id="category-name" className="form-input" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} maxLength={30} placeholder="Misalnya: Kesehatan" required />{!categoryEditingId && <><label className="field-label" htmlFor="category-type">Jenis kategori</label><select id="category-type" className="form-input" value={categoryType} onChange={(event) => setCategoryType(event.target.value as CategoryRecord['type'])}><option value="expense">Pengeluaran</option><option value="income">Pemasukan</option></select></>}{categoryError && <p className="form-error" role="alert">{categoryError}</p>}<button className="save-button" type="submit" disabled={categorySaving}>{categorySaving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> Simpan kategori</>}</button></form></section></div>}
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false) }}>
         <section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal-heading"><div><p className="eyebrow">{editingId ? 'UBAH TRANSAKSI' : 'TRANSAKSI BARU'}</p><h2 id="modal-title">{editingId ? 'Edit transaksi' : 'Catat uangmu'}</h2></div><button className="icon-button" type="button" onClick={() => setModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div>
