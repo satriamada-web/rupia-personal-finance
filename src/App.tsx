@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
@@ -159,7 +159,7 @@ export default function App() {
     } finally { setBackupBusy(false) }
   }
 
-  async function importBackup(event: React.ChangeEvent<HTMLInputElement>) {
+  async function importBackup(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
