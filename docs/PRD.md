@@ -11,7 +11,7 @@ Pengguna sering tidak mengetahui total saldo, pola pengeluaran, dan sisa anggara
 ## 3. Tujuan produk
 - Membantu pengguna mencatat pemasukan dan pengeluaran.
 - Menampilkan saldo dompet secara mudah dipahami.
-- Membantu pengguna mengelola anggaran dan tujuan tabungan.
+- Membantu pengguna mengelola anggaran per kategori dengan periode harian, mingguan, dan bulanan, serta tujuan tabungan.
 - Menjaga data tetap tersedia tanpa koneksi internet.
 
 ## 4. Target pengguna
@@ -22,7 +22,7 @@ Masyarakat umum yang ingin mengelola uang pribadi, termasuk pelajar, mahasiswa, 
 2. Dompet: tunai, rekening, dan e-wallet.
 3. Transaksi pemasukan, pengeluaran, dan transfer.
 4. Kategori transaksi.
-5. Anggaran bulanan.
+5. Anggaran kategori dengan periode harian, mingguan, dan bulanan.
 6. Tujuan tabungan.
 7. Riwayat, pencarian, dan filter.
 8. Ringkasan dan insight dasar.
