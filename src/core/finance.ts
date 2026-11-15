@@ -115,7 +115,7 @@ export async function addTransfer(input: {
 
 
 export async function setMonthlyBudget(input: { month: string; categoryId: string; amount: number }): Promise<void> {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.month)) throw new Error('Pilih bulan yang valid.')
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.month)) throw new Error('Pilih bulan yang valid.')
   if (!Number.isSafeInteger(input.amount) || input.amount < 0) throw new Error('Anggaran harus berupa Rupiah bulat dan tidak boleh negatif.')
   const category = await db.categories.get(input.categoryId)
   if (!category || category.type !== 'expense') throw new Error('Anggaran hanya dapat dibuat untuk kategori pengeluaran.')
