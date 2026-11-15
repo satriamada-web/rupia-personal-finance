@@ -2,16 +2,21 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, updateTransaction } from './core/finance'
-import type { CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
+import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction } from './core/finance'
+import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
 const today = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10) }
+const currentMonth = () => today().slice(0, 7)
 
 export default function App() {
   const [wallets, setWallets] = useState<WalletRecord[]>([])
   const [categories, setCategories] = useState<CategoryRecord[]>([])
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
+  const [budgets, setBudgets] = useState<BudgetRecord[]>([])
+  const [budgetMonth, setBudgetMonth] = useState(currentMonth())
+  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
+  const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -36,14 +41,14 @@ export default function App() {
 
   async function refresh() {
     const snapshot = await getFinanceSnapshot()
-    setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions)
+    setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets)
   }
 
   useEffect(() => {
     let active = true
     initializeFinanceData().then(getFinanceSnapshot).then((snapshot) => {
       if (!active) return
-      setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setReady(true)
+      setWallets(snapshot.wallets); setCategories(snapshot.categories); setTransactions(snapshot.transactions); setBudgets(snapshot.budgets); setReady(true)
     }).catch(() => { if (active) setError('Data lokal belum dapat dibuka. Coba muat ulang aplikasi.') })
     return () => { active = false }
   }, [])
@@ -57,6 +62,14 @@ export default function App() {
   const totalBalance = balances.reduce((sum, item) => sum + item.balance, 0)
   const totalIncome = transactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
   const totalExpense = transactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
+  const monthlyExpenses = transactions.filter((item) => item.type === 'expense' && item.transactionDate.startsWith(budgetMonth))
+  const monthlyBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
+    const budget = budgets.find((item) => item.month === budgetMonth && item.categoryId === category.id)
+    const spent = monthlyExpenses.filter((item) => item.categoryId === category.id).reduce((sum, item) => sum + item.amount, 0)
+    return { category, budget, spent, percent: budget ? Math.min(100, Math.round(spent / budget.amount * 100)) : 0 }
+  })
+  const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
+  const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
 
   async function submitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('')
@@ -82,6 +95,15 @@ export default function App() {
     setEditingId(transaction.id); setType(transaction.type === 'income' ? 'income' : 'expense')
     setAmount(String(transaction.amount)); setTransactionWalletId(transaction.walletId); setCategoryId(transaction.categoryId ?? '')
     setTransactionDate(transaction.transactionDate); setNote(transaction.note); setError(''); setModalOpen(true)
+  }
+
+  async function saveBudget(categoryId: string) {
+    const existing = budgets.find((item) => item.month === budgetMonth && item.categoryId === categoryId)
+    const amountValue = Number(budgetDrafts[categoryId] ?? existing?.amount ?? 0)
+    setBudgetSaving(categoryId); setError('')
+    try { await setMonthlyBudget({ month: budgetMonth, categoryId, amount: amountValue }); await refresh(); setBudgetDrafts((current) => { const next = { ...current }; delete next[categoryId]; return next }) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Anggaran gagal disimpan.') }
+    finally { setBudgetSaving(null) }
   }
 
   async function submitWallet(event: FormEvent<HTMLFormElement>) {
@@ -133,6 +155,20 @@ export default function App() {
       <section className="summary-grid" aria-label="Ringkasan keuangan">
         <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft size={18} /></div><span>Pemasukan tercatat</span><strong>{formatRupiah(totalIncome)}</strong></article>
         <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight size={18} /></div><span>Pengeluaran tercatat</span><strong>{formatRupiah(totalExpense)}</strong></article>
+      </section>
+      <section className="budget-section">
+        <div className="section-heading"><div><p className="eyebrow">RENCANA PENGELUARAN</p><h2>Anggaran bulanan</h2></div></div>
+        <label className="field-label" htmlFor="budget-month">Periode anggaran</label>
+        <input id="budget-month" className="form-input budget-month" type="month" value={budgetMonth} onChange={(event) => { setBudgetMonth(event.target.value); setBudgetDrafts({}); setError('') }} />
+        <div className="budget-overview"><div><span>Terpakai bulan ini</span><strong>{formatRupiah(totalMonthlySpent)}</strong></div><div><span>Total anggaran</span><strong>{formatRupiah(totalMonthlyBudget)}</strong></div></div>
+        {monthlyBudgetRows.map(({ category, budget, spent, percent }) => <div className="budget-row" key={category.id}>
+          <div className="budget-row-heading"><strong>{category.name}</strong><span>{budget ? formatRupiah(spent) + ' / ' + formatRupiah(budget.amount) : formatRupiah(spent) + ' terpakai'}</span></div>
+          {budget && <div className="budget-track"><div className={spent > budget.amount ? 'budget-fill over' : 'budget-fill'} style={{ width: percent + '%' }} /></div>}
+          <div className="budget-edit"><input className="form-input" type="number" min="0" step="1" inputMode="numeric" aria-label={"Anggaran kategori " + category.name} placeholder="Atur batas anggaran (Rp)" value={budgetDrafts[category.id] ?? (budget ? String(budget.amount) : '')} onChange={(event) => setBudgetDrafts((current) => ({ ...current, [category.id]: event.target.value }))} /><button type="button" className="budget-save" disabled={budgetSaving === category.id} onClick={() => saveBudget(category.id)}>{budgetSaving === category.id ? '…' : 'Simpan'}</button></div>
+          {budget && <p className={spent > budget.amount ? 'budget-status over' : 'budget-status'}>{spent > budget.amount ? 'Melebihi anggaran ' + formatRupiah(spent - budget.amount) : 'Sisa ' + formatRupiah(budget.amount - spent) + ' · ' + percent + '% terpakai'}</p>}
+        </div>)}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <p className="budget-hint">Isi nominal batas pengeluaran per kategori. Masukkan 0 lalu simpan untuk menghapus anggaran.</p>
       </section>
       <section className="transaction-section">
         <div className="section-heading">
