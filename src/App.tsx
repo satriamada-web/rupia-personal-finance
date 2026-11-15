@@ -81,6 +81,16 @@ export default function App() {
   }
 
   useEffect(() => {
+    const updateOnlineStatus = () => setIsOnline(navigator.onLine)
+    window.addEventListener('online', updateOnlineStatus)
+    window.addEventListener('offline', updateOnlineStatus)
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus)
+      window.removeEventListener('offline', updateOnlineStatus)
+    }
+  }, [])
+
+  useEffect(() => {
     let active = true
     initializeFinanceData().then(getFinanceSnapshot).then((snapshot) => {
       if (!active) return
