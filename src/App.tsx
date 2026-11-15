@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
 import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setMonthlyBudget, updateTransaction } from './core/finance'
@@ -15,6 +15,8 @@ export default function App() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [budgets, setBudgets] = useState<BudgetRecord[]>([])
   const [budgetMonth, setBudgetMonth] = useState(currentMonth())
+  const [calendarMonth, setCalendarMonth] = useState(currentMonth())
+  const [selectedDate, setSelectedDate] = useState(today())
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -70,6 +72,22 @@ export default function App() {
   })
   const totalMonthlyBudget = monthlyBudgetRows.reduce((sum, row) => sum + (row.budget?.amount ?? 0), 0)
   const totalMonthlySpent = monthlyExpenses.reduce((sum, item) => sum + item.amount, 0)
+  const calendarDate = new Date(calendarMonth + '-01T12:00:00')
+  const calendarDaysCount = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate()
+  const calendarStartOffset = calendarDate.getDay()
+  const calendarCells = Array.from({ length: calendarStartOffset + calendarDaysCount }, (_, index) => index < calendarStartOffset ? null : index - calendarStartOffset + 1)
+  const calendarTransactions = transactions.filter((item) => item.transactionDate.startsWith(calendarMonth))
+  const selectedDayTransactions = calendarTransactions.filter((item) => item.transactionDate === selectedDate)
+  const calendarIncome = calendarTransactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
+  const calendarExpense = calendarTransactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
+  const monthLabel = calendarDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  function shiftCalendarMonth(amount: number) {
+    const next = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + amount, 1, 12)
+    const nextMonth = next.getFullYear() + '-' + String(next.getMonth() + 1).padStart(2, '0')
+    setCalendarMonth(nextMonth)
+    setSelectedDate(nextMonth + '-01')
+  }
+
 
   async function submitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('')
@@ -155,6 +173,36 @@ export default function App() {
       <section className="summary-grid" aria-label="Ringkasan keuangan">
         <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft size={18} /></div><span>Pemasukan tercatat</span><strong>{formatRupiah(totalIncome)}</strong></article>
         <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight size={18} /></div><span>Pengeluaran tercatat</span><strong>{formatRupiah(totalExpense)}</strong></article>
+      </section>
+
+      <section className="calendar-section">
+        <div className="section-heading"><div><p className="eyebrow">ARUS KAS HARIAN</p><h2>Kalender keuangan</h2></div><div className="calendar-nav"><button type="button" aria-label="Bulan sebelumnya" onClick={() => shiftCalendarMonth(-1)}><ChevronLeft size={18} /></button><button type="button" aria-label="Bulan berikutnya" onClick={() => shiftCalendarMonth(1)}><ChevronRight size={18} /></button></div></div>
+        <div className="calendar-month-label">{monthLabel}</div>
+        <div className="calendar-summary"><div><span>Pemasukan</span><strong className="amount-income">{formatRupiah(calendarIncome)}</strong></div><div><span>Pengeluaran</span><strong className="amount-expense">{formatRupiah(calendarExpense)}</strong></div></div>
+        <div className="calendar-grid" role="group" aria-label="Pilih tanggal">
+          {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((day) => <span className="calendar-weekday" key={day}>{day}</span>)}
+          {calendarCells.map((day, index) => {
+            if (!day) return <span className="calendar-empty" key={'empty-' + index} />
+            const dateKey = calendarMonth + '-' + String(day).padStart(2, '0')
+            const dayItems = calendarTransactions.filter((item) => item.transactionDate === dateKey)
+            const hasIncome = dayItems.some((item) => item.type === 'income')
+            const hasExpense = dayItems.some((item) => item.type === 'expense')
+            return <button type="button" key={dateKey} className={'calendar-day' + (selectedDate === dateKey ? ' selected' : '') + (dateKey === today() ? ' today' : '')} onClick={() => setSelectedDate(dateKey)} aria-pressed={selectedDate === dateKey}>
+              <span>{day}</span><i className="calendar-dots">{hasIncome && <b className="income-dot" />}{hasExpense && <b className="expense-dot" />}{dayItems.some((item) => item.type === 'transfer') && <b className="transfer-dot" />}</i>
+            </button>
+          })}
+        </div>
+        <div className="calendar-legend"><span><i className="income-dot" /> Pemasukan</span><span><i className="expense-dot" /> Pengeluaran</span><span><i className="transfer-dot" /> Transfer</span></div>
+        <div className="calendar-day-detail"><div className="calendar-detail-heading"><strong>{new Date(selectedDate + 'T12:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</strong><span>{selectedDayTransactions.length} aktivitas</span></div>
+          {selectedDayTransactions.length ? selectedDayTransactions.map((item) => {
+            const category = categories.find((entry) => entry.id === item.categoryId)
+            const isIncome = item.type === 'income'
+            const isTransfer = item.type === 'transfer'
+            const source = wallets.find((wallet) => wallet.id === item.walletId)
+            const destination = wallets.find((wallet) => wallet.id === item.destinationWalletId)
+            return <div className="calendar-transaction" key={item.id}><div><strong>{isTransfer ? 'Transfer antar-dompet' : category?.name ?? 'Transaksi'}</strong><span>{isTransfer ? (source?.name ?? 'Dompet') + ' → ' + (destination?.name ?? 'Dompet tujuan') : item.note || (isIncome ? 'Pemasukan' : 'Pengeluaran')}</span></div><b className={isTransfer ? 'transfer-amount' : isIncome ? 'amount-income' : 'amount-expense'}>{isTransfer ? '' : isIncome ? '+' : '−'}{formatRupiah(item.amount)}</b></div>
+          }) : <p className="calendar-no-activity">Belum ada transaksi pada tanggal ini.</p>}
+        </div>
       </section>
       <section className="budget-section">
         <div className="section-heading"><div><p className="eyebrow">RENCANA PENGELUARAN</p><h2>Anggaran bulanan</h2></div></div>
