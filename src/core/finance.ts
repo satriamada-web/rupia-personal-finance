@@ -289,6 +289,22 @@ export async function createSavingsGoal(input: { name: string; targetAmount: num
   await db.savingsGoals.add({ id: makeId(), name, targetAmount: input.targetAmount, ...(input.deadline ? { deadline: input.deadline } : {}), createdAt: now, updatedAt: now })
 }
 
+export async function updateSavingsGoal(id: string, input: { name: string; targetAmount: number; deadline?: string }): Promise<void> {
+  const name = input.name.trim()
+  if (!name) throw new Error('Nama target wajib diisi.')
+  if (name.length > 50) throw new Error('Nama target maksimal 50 karakter.')
+  if (!Number.isSafeInteger(input.targetAmount) || input.targetAmount <= 0) throw new Error('Target harus berupa nominal Rupiah bulat lebih dari nol.')
+  if (input.deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
+  const existing = await db.savingsGoals.get(id)
+  if (!existing) throw new Error('Target tabungan tidak ditemukan.')
+  await db.savingsGoals.update(id, {
+    name,
+    targetAmount: input.targetAmount,
+    ...(input.deadline ? { deadline: input.deadline } : { deadline: undefined }),
+    updatedAt: new Date().toISOString(),
+  })
+}
+
 export async function addGoalContribution(input: { goalId: string; amount: number; contributionDate: string; note: string }): Promise<void> {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new Error('Kontribusi harus berupa nominal Rupiah bulat lebih dari nol.')
   if (!input.contributionDate || Number.isNaN(Date.parse(input.contributionDate))) throw new Error('Tanggal kontribusi tidak valid.')
