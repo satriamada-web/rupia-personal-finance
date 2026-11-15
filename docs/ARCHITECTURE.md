@@ -6,12 +6,12 @@ Offline-first, domain logic terpisah dari UI, nilai uang integer, dan penyimpana
 ## Stack awal
 - React + TypeScript + Vite.
 - Dexie/IndexedDB untuk web.
-- PWA service worker akan ditambahkan setelah shell aplikasi stabil.
+- PWA service worker digunakan pada web; tidak didaftarkan di dalam native Capacitor WebView.\n- Capacitor 8 membungkus hasil build Vite (`dist`) untuk Android.
 - Vitest untuk unit test.
-- Capacitor + SQLite direncanakan untuk Android pada milestone platform.
+- Capacitor 8 + Android untuk APK debug.\n- IndexedDB tetap menjadi penyimpanan lokal pada tahap wrapper awal; adapter SQLite native belum diimplementasikan.
 
 ## Batas platform
-IndexedDB web dan SQLite native adalah penyimpanan berbeda. Keduanya tidak otomatis berbagi data. Implementasi Android harus menggunakan adapter repository yang sama secara konseptual serta jalur backup/restore yang kompatibel.
+IndexedDB web dan SQLite native adalah penyimpanan berbeda. Keduanya tidak otomatis berbagi data. Pada wrapper Android saat ini, IndexedDB berjalan di WebView dan tidak otomatis menjadi SQLite. Migrasi ke SQLite native harus memakai adapter terpisah serta jalur backup/restore yang kompatibel. Jangan mengklaim penyimpanan SQLite sebelum adapter dan migrasinya diuji.
 
 ## Lapisan
 1. UI: halaman dan komponen React.
