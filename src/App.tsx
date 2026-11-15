@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2, ArrowLeftRight, ChevronLeft, ChevronRight, Search, SlidersHorizontal, FileDown, FileText } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
+import { getBudgetPeriodKey, getBudgetPeriodRange } from './core/budget'
 import { formatRupiah } from './core/money'
 import { addTransaction, addTransfer, createWallet, deleteTransaction, getFinanceSnapshot, initializeFinanceData, setBudget, updateTransaction, createFinanceBackup, restoreFinanceBackup, createCategory, updateCategory, deleteCategory, createSavingsGoal, updateSavingsGoal, addGoalContribution, updateGoalContribution, deleteGoalContribution, deleteSavingsGoal } from './core/finance'
 import type { BudgetRecord, CategoryRecord, TransactionRecord, WalletRecord, SavingsGoalRecord, GoalContributionRecord } from './database/db'
@@ -9,9 +10,7 @@ type TransactionType = 'income' | 'expense'
 type BudgetPeriod = 'daily' | 'weekly' | 'monthly'
 const today = () => { const date = new Date(); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10) }
 const currentMonth = () => today().slice(0, 7)
-const mondayOf = (date: string) => { const value = new Date(date + 'T12:00:00'); const day = (value.getDay() + 6) % 7; value.setDate(value.getDate() - day); return value.toISOString().slice(0, 10) }
-const periodKeyFor = (period: BudgetPeriod, date: string) => period === 'monthly' ? date.slice(0, 7) : period === 'weekly' ? mondayOf(date) : date
-const periodRange = (period: BudgetPeriod, key: string) => { if (period === 'monthly') return { from: key + '-01', to: new Date(Number(key.slice(0,4)), Number(key.slice(5,7)), 0, 12).toISOString().slice(0,10) }; if (period === 'weekly') { const start = new Date(key + 'T12:00:00'); const end = new Date(start); end.setDate(end.getDate()+6); return { from:key, to:end.toISOString().slice(0,10) } } return { from:key, to:key } }
+
 
 export default function App() {
   const [wallets, setWallets] = useState<WalletRecord[]>([])
@@ -113,8 +112,8 @@ export default function App() {
   const totalBalance = balances.reduce((sum, item) => sum + item.balance, 0)
   const totalIncome = transactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
   const totalExpense = transactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
-  const selectedBudgetKey = periodKeyFor(budgetPeriod, budgetDate)
-  const selectedBudgetRange = periodRange(budgetPeriod, selectedBudgetKey)
+  const selectedBudgetKey = getBudgetPeriodKey(budgetPeriod, budgetDate)
+  const selectedBudgetRange = getBudgetPeriodRange(budgetPeriod, selectedBudgetKey)
   const periodExpenses = transactions.filter((item) => item.type === 'expense' && item.transactionDate >= selectedBudgetRange.from && item.transactionDate <= selectedBudgetRange.to)
   const selectedBudgetRows = categories.filter((category) => category.type === 'expense').map((category) => {
     const budget = budgets.find((item) => item.categoryId === category.id
