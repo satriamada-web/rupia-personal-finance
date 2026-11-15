@@ -119,10 +119,10 @@ export type BudgetPeriod = 'daily' | 'weekly' | 'monthly'
 
 export async function setBudget(input: { period: BudgetPeriod; periodKey: string; categoryId: string; amount: number }): Promise<void> {
   const validKey = input.period === 'daily'
-    ? /^\\d{4}-\\d{2}-\\d{2}$/.test(input.periodKey)
+    ? /^\d{4}-\d{2}-\d{2}$/.test(input.periodKey)
     : input.period === 'weekly'
-      ? /^\\d{4}-\\d{2}-\\d{2}$/.test(input.periodKey)
-      : /^\\d{4}-(0[1-9]|1[0-2])$/.test(input.periodKey)
+      ? /^\d{4}-\d{2}-\d{2}$/.test(input.periodKey)
+      : /^\d{4}-(0[1-9]|1[0-2])$/.test(input.periodKey)
   if (!validKey || Number.isNaN(Date.parse(input.periodKey + (input.period === 'monthly' ? '-01' : 'T12:00:00')))) throw new Error('Periode anggaran tidak valid.')
   if (!Number.isSafeInteger(input.amount) || input.amount < 0) throw new Error('Anggaran harus berupa Rupiah bulat dan tidak boleh negatif.')
   const category = await db.categories.get(input.categoryId)
@@ -210,13 +210,13 @@ function validateBackup(value: unknown): FinanceBackup {
     && (item.deletedAt === undefined || typeof item.deletedAt === 'string'))
   const validBudgets = (budgets as unknown[]).every((item) => isRecord(item)
     && typeof item.id === 'string' && typeof item.month === 'string'
-    && /^\\d{4}-(0[1-9]|1[0-2])$/.test(item.month)
+    && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month)
     && typeof item.categoryId === 'string' && Number.isSafeInteger(item.amount)
     && Number(item.amount) > 0 && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
   const validGoals = (savingsGoals as unknown[]).every((item) => isRecord(item)
     && typeof item.id === 'string' && typeof item.name === 'string'
     && Number.isSafeInteger(item.targetAmount) && Number(item.targetAmount) > 0
-    && (item.deadline === undefined || (typeof item.deadline === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(item.deadline)))
+    && (item.deadline === undefined || (typeof item.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.deadline)))
     && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
   const validContributions = (goalContributions as unknown[]).every((item) => isRecord(item)
     && typeof item.id === 'string' && typeof item.goalId === 'string'
@@ -297,7 +297,7 @@ export async function createSavingsGoal(input: { name: string; targetAmount: num
   if (!name) throw new Error('Nama target wajib diisi.')
   if (name.length > 50) throw new Error('Nama target maksimal 50 karakter.')
   if (!Number.isSafeInteger(input.targetAmount) || input.targetAmount <= 0) throw new Error('Target harus berupa nominal Rupiah bulat lebih dari nol.')
-  if (input.deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
+  if (input.deadline && (!/^\d{4}-\d{2}-\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
   const now = new Date().toISOString()
   await db.savingsGoals.add({ id: makeId(), name, targetAmount: input.targetAmount, ...(input.deadline ? { deadline: input.deadline } : {}), createdAt: now, updatedAt: now })
 }
@@ -307,7 +307,7 @@ export async function updateSavingsGoal(id: string, input: { name: string; targe
   if (!name) throw new Error('Nama target wajib diisi.')
   if (name.length > 50) throw new Error('Nama target maksimal 50 karakter.')
   if (!Number.isSafeInteger(input.targetAmount) || input.targetAmount <= 0) throw new Error('Target harus berupa nominal Rupiah bulat lebih dari nol.')
-  if (input.deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
+  if (input.deadline && (!/^\d{4}-\d{2}-\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
   const existing = await db.savingsGoals.get(id)
   if (!existing) throw new Error('Target tabungan tidak ditemukan.')
   await db.savingsGoals.update(id, {
