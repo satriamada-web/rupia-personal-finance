@@ -6,7 +6,7 @@ export interface DateRange {
 }
 
 function parseDateKey(value: string): Date {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) throw new Error('Tanggal harus menggunakan format YYYY-MM-DD.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Tanggal harus menggunakan format YYYY-MM-DD.')
   const [year, month, day] = value.split('-').map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
@@ -26,7 +26,7 @@ export function getBudgetPeriodKey(period: BudgetPeriod, dateKey: string): strin
 
 export function getBudgetPeriodRange(period: BudgetPeriod, periodKey: string): DateRange {
   if (period === 'monthly') {
-    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(periodKey)) throw new Error('Periode bulanan tidak valid.')
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodKey)) throw new Error('Periode bulanan tidak valid.')
     const [year, month] = periodKey.split('-').map(Number)
     const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
     return { from: periodKey + '-01', to: periodKey + '-' + String(lastDay).padStart(2, '0') }
