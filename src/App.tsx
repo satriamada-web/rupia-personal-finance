@@ -40,7 +40,8 @@ export default function App() {
   const [historyTo, setHistoryTo] = useState('')
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)\n  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [ready, setReady] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [categoryName, setCategoryName] = useState('')
   const [categoryType, setCategoryType] = useState<CategoryRecord['type']>('expense')
@@ -197,7 +198,8 @@ export default function App() {
         return [item.transactionDate, kind, item.amount, category, source, destination, item.note].map(quote).join(',')
       }),
     ]
-    const blob = new Blob(['\\uFEFF' + lines.join('\\r\\n')], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob(['\\uFEFF' + lines.join('\\r\
+')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url; link.download = 'rupia-laporan-' + reportFrom + '-sampai-' + reportTo + '.csv'
