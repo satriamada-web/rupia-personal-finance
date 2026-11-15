@@ -1,4 +1,4 @@
-import { db, type BudgetRecord, type CategoryRecord, type TransactionRecord, type WalletRecord } from '../database/db'
+import { db, type BudgetRecord, type CategoryRecord, type TransactionRecord, type WalletRecord, type SavingsGoalRecord, type GoalContributionRecord } from '../database/db'
 
 const defaultCategories: Array<Pick<CategoryRecord, 'id' | 'name' | 'type' | 'icon' | 'color' | 'isDefault'>> = [
   { id: 'income-salary', name: 'Uang saku', type: 'income', icon: 'wallet', color: '#39815d', isDefault: true },
@@ -53,10 +53,11 @@ export async function addTransaction(input: NewTransaction): Promise<void> {
 }
 
 export async function getFinanceSnapshot() {
-  const [wallets, categories, transactions, budgets] = await Promise.all([
+  const [wallets, categories, transactions, budgets, savingsGoals, goalContributions] = await Promise.all([
     db.wallets.toArray(), db.categories.toArray(), db.transactions.orderBy('transactionDate').reverse().toArray(), db.budgets.toArray(),
+    db.savingsGoals.toArray(), db.goalContributions.orderBy('contributionDate').reverse().toArray(),
   ])
-  return { wallets, categories, transactions: transactions.filter((item) => !item.deletedAt), budgets }
+  return { wallets, categories, transactions: transactions.filter((item) => !item.deletedAt), budgets, savingsGoals, goalContributions }
 }
 
 export async function updateTransaction(id: string, input: NewTransaction): Promise<void> {
@@ -136,25 +137,28 @@ export async function setMonthlyBudget(input: { month: string; categoryId: strin
 
 export interface FinanceBackup {
   app: 'Rupia'
-  version: 1
+  version: 2
   exportedAt: string
   data: {
     wallets: WalletRecord[]
     categories: CategoryRecord[]
     transactions: TransactionRecord[]
     budgets: BudgetRecord[]
+    savingsGoals: SavingsGoalRecord[]
+    goalContributions: GoalContributionRecord[]
   }
 }
 
 export async function createFinanceBackup(): Promise<FinanceBackup> {
-  const [wallets, categories, transactions, budgets] = await Promise.all([
+  const [wallets, categories, transactions, budgets, savingsGoals, goalContributions] = await Promise.all([
     db.wallets.toArray(), db.categories.toArray(), db.transactions.toArray(), db.budgets.toArray(),
+    db.savingsGoals.toArray(), db.goalContributions.toArray(),
   ])
   return {
     app: 'Rupia',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
-    data: { wallets, categories, transactions, budgets },
+    data: { wallets, categories, transactions, budgets, savingsGoals, goalContributions },
   }
 }
 
@@ -163,11 +167,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validateBackup(value: unknown): FinanceBackup {
-  if (!isRecord(value) || value.app !== 'Rupia' || value.version !== 1 || !isRecord(value.data)) {
+  if (!isRecord(value) || value.app !== 'Rupia' || ![1, 2].includes(Number(value.version)) || !isRecord(value.data)) {
     throw new Error('Format cadangan tidak dikenali atau versinya tidak didukung.')
   }
   const { wallets, categories, transactions, budgets } = value.data
-  if (![wallets, categories, transactions, budgets].every(Array.isArray)) {
+  const savingsGoals = value.data.savingsGoals ?? []
+  const goalContributions = value.data.goalContributions ?? []
+  if (![wallets, categories, transactions, budgets, savingsGoals, goalContributions].every(Array.isArray)) {
     throw new Error('File cadangan tidak lengkap atau strukturnya rusak.')
   }
   const validWallets = (wallets as unknown[]).every((item) => isRecord(item)
@@ -194,12 +200,24 @@ function validateBackup(value: unknown): FinanceBackup {
     && /^\\d{4}-(0[1-9]|1[0-2])$/.test(item.month)
     && typeof item.categoryId === 'string' && Number.isSafeInteger(item.amount)
     && Number(item.amount) > 0 && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
-  if (!validWallets || !validCategories || !validTransactions || !validBudgets) {
+  const validGoals = (savingsGoals as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && typeof item.name === 'string'
+    && Number.isSafeInteger(item.targetAmount) && Number(item.targetAmount) > 0
+    && (item.deadline === undefined || (typeof item.deadline === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(item.deadline)))
+    && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
+  const validContributions = (goalContributions as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && typeof item.goalId === 'string'
+    && Number.isSafeInteger(item.amount) && Number(item.amount) > 0
+    && typeof item.contributionDate === 'string' && !Number.isNaN(Date.parse(item.contributionDate))
+    && typeof item.note === 'string' && typeof item.createdAt === 'string')
+  if (!validWallets || !validCategories || !validTransactions || !validBudgets || !validGoals || !validContributions) {
     throw new Error('Ada data yang tidak valid di dalam file cadangan.')
   }
   const walletIds = new Set((wallets as WalletRecord[]).map((item) => item.id))
   const categoryMap = new Map((categories as CategoryRecord[]).map((item) => [item.id, item]))
-  if ((transactions as TransactionRecord[]).some((item) =>
+  const goalIds = new Set((savingsGoals as SavingsGoalRecord[]).map((item) => item.id))
+  if ((goalContributions as GoalContributionRecord[]).some((item) => !goalIds.has(item.goalId))
+    || (transactions as TransactionRecord[]).some((item) =>
     !walletIds.has(item.walletId)
     || (item.destinationWalletId !== undefined && !walletIds.has(item.destinationWalletId))
     || (item.type === 'transfer' ? !item.destinationWalletId || item.categoryId !== undefined : !item.categoryId || categoryMap.get(item.categoryId)?.type !== item.type)
@@ -211,12 +229,14 @@ function validateBackup(value: unknown): FinanceBackup {
 
 export async function restoreFinanceBackup(value: unknown): Promise<void> {
   const backup = validateBackup(value)
-  await db.transaction('rw', db.wallets, db.categories, db.transactions, db.budgets, async () => {
-    await Promise.all([db.wallets.clear(), db.categories.clear(), db.transactions.clear(), db.budgets.clear()])
+  await db.transaction('rw', db.wallets, db.categories, db.transactions, db.budgets, db.savingsGoals, db.goalContributions, async () => {
+    await Promise.all([db.wallets.clear(), db.categories.clear(), db.transactions.clear(), db.budgets.clear(), db.savingsGoals.clear(), db.goalContributions.clear()])
     await db.wallets.bulkPut(backup.data.wallets)
     await db.categories.bulkPut(backup.data.categories)
     await db.transactions.bulkPut(backup.data.transactions)
     await db.budgets.bulkPut(backup.data.budgets)
+    await db.savingsGoals.bulkPut(backup.data.savingsGoals ?? [])
+    await db.goalContributions.bulkPut(backup.data.goalContributions ?? [])
   })
 }
 
@@ -256,4 +276,32 @@ export async function deleteCategory(id: string): Promise<void> {
   ])
   if (transactionCount || budgetCount) throw new Error('Kategori sudah digunakan. Hapus atau ubah transaksi dan anggarannya terlebih dahulu.')
   await db.categories.delete(id)
+}
+
+
+export async function createSavingsGoal(input: { name: string; targetAmount: number; deadline?: string }): Promise<void> {
+  const name = input.name.trim()
+  if (!name) throw new Error('Nama target wajib diisi.')
+  if (name.length > 50) throw new Error('Nama target maksimal 50 karakter.')
+  if (!Number.isSafeInteger(input.targetAmount) || input.targetAmount <= 0) throw new Error('Target harus berupa nominal Rupiah bulat lebih dari nol.')
+  if (input.deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.deadline) || Number.isNaN(Date.parse(input.deadline)))) throw new Error('Tanggal target tidak valid.')
+  const now = new Date().toISOString()
+  await db.savingsGoals.add({ id: makeId(), name, targetAmount: input.targetAmount, ...(input.deadline ? { deadline: input.deadline } : {}), createdAt: now, updatedAt: now })
+}
+
+export async function addGoalContribution(input: { goalId: string; amount: number; contributionDate: string; note: string }): Promise<void> {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new Error('Kontribusi harus berupa nominal Rupiah bulat lebih dari nol.')
+  if (!input.contributionDate || Number.isNaN(Date.parse(input.contributionDate))) throw new Error('Tanggal kontribusi tidak valid.')
+  const goal = await db.savingsGoals.get(input.goalId)
+  if (!goal) throw new Error('Target tabungan tidak ditemukan.')
+  const now = new Date().toISOString()
+  await db.goalContributions.add({ id: makeId(), goalId: input.goalId, amount: input.amount, contributionDate: input.contributionDate, note: input.note.trim(), createdAt: now })
+}
+
+export async function deleteSavingsGoal(id: string): Promise<void> {
+  await db.transaction('rw', db.savingsGoals, db.goalContributions, async () => {
+    if (!await db.savingsGoals.get(id)) throw new Error('Target tabungan tidak ditemukan.')
+    await db.goalContributions.where('goalId').equals(id).delete()
+    await db.savingsGoals.delete(id)
+  })
 }
