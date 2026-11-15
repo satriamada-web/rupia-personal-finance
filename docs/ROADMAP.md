@@ -6,7 +6,7 @@
 - [ ] M1 — Finance engine dan unit tests
 - [ ] M2 — Dompet dan transaksi CRUD
 - [ ] M3 — Anggaran, tabungan, dan insight
-- [ ] M4 — Backup/restore dan PWA offline
+- [x] M4 — Backup/restore dan PWA offline
 - [ ] M5 — Adapter SQLite dan build Android
 - [ ] M6 — Uji beta dan persiapan rilis
 
