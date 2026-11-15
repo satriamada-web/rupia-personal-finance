@@ -40,7 +40,7 @@ export default function App() {
   const [historyTo, setHistoryTo] = useState('')
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(false)\n  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [categoryName, setCategoryName] = useState('')
   const [categoryType, setCategoryType] = useState<CategoryRecord['type']>('expense')
@@ -391,7 +391,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="/" aria-label="Rupia beranda"><span className="brand-mark">R</span><span>rupia</span></a>
-        <span className="offline-pill"><span className="status-dot" /> Tersimpan di perangkat</span>
+        <span className={isOnline ? "offline-pill" : "offline-pill is-offline"}><span className="status-dot" /> {isOnline ? "Data lokal · Online" : "Mode offline"}</span>
       </header>
       <section className="welcome">
         <p className="eyebrow">KEUANGAN PRIBADIMU</p>
