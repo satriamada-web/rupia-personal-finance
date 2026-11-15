@@ -132,3 +132,90 @@ export async function setMonthlyBudget(input: { month: string; categoryId: strin
   }
   await db.budgets.put(record)
 }
+
+
+export interface FinanceBackup {
+  app: 'Rupia'
+  version: 1
+  exportedAt: string
+  data: {
+    wallets: WalletRecord[]
+    categories: CategoryRecord[]
+    transactions: TransactionRecord[]
+    budgets: BudgetRecord[]
+  }
+}
+
+export async function createFinanceBackup(): Promise<FinanceBackup> {
+  const [wallets, categories, transactions, budgets] = await Promise.all([
+    db.wallets.toArray(), db.categories.toArray(), db.transactions.toArray(), db.budgets.toArray(),
+  ])
+  return {
+    app: 'Rupia',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: { wallets, categories, transactions, budgets },
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function validateBackup(value: unknown): FinanceBackup {
+  if (!isRecord(value) || value.app !== 'Rupia' || value.version !== 1 || !isRecord(value.data)) {
+    throw new Error('Format cadangan tidak dikenali atau versinya tidak didukung.')
+  }
+  const { wallets, categories, transactions, budgets } = value.data
+  if (![wallets, categories, transactions, budgets].every(Array.isArray)) {
+    throw new Error('File cadangan tidak lengkap atau strukturnya rusak.')
+  }
+  const validWallets = (wallets as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && typeof item.name === 'string'
+    && ['cash', 'bank', 'ewallet', 'other'].includes(String(item.type))
+    && Number.isSafeInteger(item.openingBalance) && Number(item.openingBalance) >= 0
+    && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
+  const validCategories = (categories as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && typeof item.name === 'string'
+    && ['income', 'expense'].includes(String(item.type))
+    && typeof item.icon === 'string' && typeof item.color === 'string'
+    && typeof item.isDefault === 'boolean' && typeof item.createdAt === 'string')
+  const validTransactions = (transactions as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && ['income', 'expense', 'transfer'].includes(String(item.type))
+    && Number.isSafeInteger(item.amount) && Number(item.amount) > 0
+    && typeof item.walletId === 'string' && typeof item.transactionDate === 'string'
+    && !Number.isNaN(Date.parse(item.transactionDate)) && typeof item.note === 'string'
+    && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string'
+    && (item.categoryId === undefined || typeof item.categoryId === 'string')
+    && (item.destinationWalletId === undefined || typeof item.destinationWalletId === 'string')
+    && (item.deletedAt === undefined || typeof item.deletedAt === 'string'))
+  const validBudgets = (budgets as unknown[]).every((item) => isRecord(item)
+    && typeof item.id === 'string' && typeof item.month === 'string'
+    && /^\\d{4}-(0[1-9]|1[0-2])$/.test(item.month)
+    && typeof item.categoryId === 'string' && Number.isSafeInteger(item.amount)
+    && Number(item.amount) > 0 && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string')
+  if (!validWallets || !validCategories || !validTransactions || !validBudgets) {
+    throw new Error('Ada data yang tidak valid di dalam file cadangan.')
+  }
+  const walletIds = new Set((wallets as WalletRecord[]).map((item) => item.id))
+  const categoryMap = new Map((categories as CategoryRecord[]).map((item) => [item.id, item]))
+  if ((transactions as TransactionRecord[]).some((item) =>
+    !walletIds.has(item.walletId)
+    || (item.destinationWalletId !== undefined && !walletIds.has(item.destinationWalletId))
+    || (item.type === 'transfer' ? !item.destinationWalletId || item.categoryId !== undefined : !item.categoryId || categoryMap.get(item.categoryId)?.type !== item.type)
+  ) || (budgets as BudgetRecord[]).some((item) => categoryMap.get(item.categoryId)?.type !== 'expense')) {
+    throw new Error('Relasi dompet atau kategori dalam cadangan tidak cocok.')
+  }
+  return value as unknown as FinanceBackup
+}
+
+export async function restoreFinanceBackup(value: unknown): Promise<void> {
+  const backup = validateBackup(value)
+  await db.transaction('rw', db.wallets, db.categories, db.transactions, db.budgets, async () => {
+    await Promise.all([db.wallets.clear(), db.categories.clear(), db.transactions.clear(), db.budgets.clear()])
+    await db.wallets.bulkPut(backup.data.wallets)
+    await db.categories.bulkPut(backup.data.categories)
+    await db.transactions.bulkPut(backup.data.transactions)
+    await db.budgets.bulkPut(backup.data.budgets)
+  })
+}
