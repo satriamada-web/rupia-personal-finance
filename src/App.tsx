@@ -58,6 +58,7 @@ export default function App() {
   const [backupStatus, setBackupStatus] = useState('')
   const [backupBusy, setBackupBusy] = useState(false)
   const backupInputRef = useRef<HTMLInputElement>(null)
+  const amountInputRef = useRef<HTMLInputElement>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [transactionWalletId, setTransactionWalletId] = useState('')
@@ -279,6 +280,8 @@ export default function App() {
 
   async function submitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('')
+    const submitter = (event.nativeEvent as SubmitEvent).submitter
+    const keepOpen = submitter instanceof HTMLButtonElement && submitter.dataset.keepOpen === 'true' && !editingId
     const numericAmount = Number(amount)
     if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) { setError('Masukkan nominal Rupiah berupa angka bulat lebih dari nol.'); return }
     if (!wallets.some((wallet) => wallet.id === transactionWalletId) || !categoryId) { setError('Dompet atau kategori belum siap. Coba lagi.'); return }
@@ -287,7 +290,13 @@ export default function App() {
       const input = { type, amount: numericAmount, walletId: transactionWalletId, categoryId, transactionDate, note }
       if (editingId) await updateTransaction(editingId, input)
       else await addTransaction(input)
-      await refresh(); setAmount(''); setNote(''); setTransactionDate(today()); setEditingId(null); setModalOpen(false)
+      await refresh()
+      setAmount(''); setNote(''); setTransactionDate(today()); setEditingId(null)
+      if (keepOpen) {
+        window.setTimeout(() => amountInputRef.current?.focus(), 0)
+      } else {
+        setModalOpen(false)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Transaksi gagal disimpan.')
     } finally { setSaving(false) }
@@ -629,7 +638,7 @@ export default function App() {
               <button type="button" className={type === 'expense' ? 'selected expense-choice' : ''} onClick={() => setType('expense')}><ArrowUpRight size={17} /> Pengeluaran</button>
             </div>
             <label className="field-label" htmlFor="amount">Nominal (Rp)</label>
-            <input id="amount" className="form-input amount-input" type="number" inputMode="numeric" autoFocus min="1" step="1" placeholder="Contoh: 25000" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+            <input ref={amountInputRef} id="amount" className="form-input amount-input" type="number" inputMode="numeric" autoFocus min="1" step="1" placeholder="Contoh: 25000" value={amount} onChange={(event) => setAmount(event.target.value)} required />
             <label className="field-label" htmlFor="transaction-wallet">Sumber dompet</label>
             <select id="transaction-wallet" className="form-input" value={transactionWalletId} onChange={(event) => setTransactionWalletId(event.target.value)} required>{wallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</select>
             <label className="field-label" htmlFor="category">Kategori</label>
@@ -640,6 +649,7 @@ export default function App() {
             <input id="note" className="form-input" type="text" maxLength={120} placeholder="Misalnya: makan siang" value={note} onChange={(event) => setNote(event.target.value)} />
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="save-button" type="submit" disabled={saving || !ready}>{saving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> {editingId ? 'Simpan perubahan' : 'Simpan transaksi'}</>}</button>
+            {!editingId && <button className="text-button" type="submit" data-keep-open="true" disabled={saving || !ready}>Simpan &amp; catat lagi</button>}
           </form>
         </section>
       </div>}
