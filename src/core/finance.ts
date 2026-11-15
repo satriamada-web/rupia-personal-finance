@@ -81,3 +81,34 @@ export async function deleteTransaction(id: string): Promise<void> {
   const now = new Date().toISOString()
   await db.transactions.update(id, { deletedAt: now, updatedAt: now })
 }
+
+
+export async function createWallet(input: { name: string; type: WalletRecord['type']; openingBalance: number }): Promise<void> {
+  const name = input.name.trim()
+  if (!name) throw new Error('Nama dompet wajib diisi.')
+  if (name.length > 40) throw new Error('Nama dompet maksimal 40 karakter.')
+  if (!Number.isSafeInteger(input.openingBalance) || input.openingBalance < 0) throw new Error('Saldo awal harus berupa Rupiah bulat dan tidak boleh negatif.')
+  const now = new Date().toISOString()
+  await db.wallets.add({
+    id: makeId(), name, type: input.type, openingBalance: input.openingBalance,
+    createdAt: now, updatedAt: now,
+  })
+}
+
+export async function addTransfer(input: {
+  amount: number; walletId: string; destinationWalletId: string; transactionDate: string; note: string
+}): Promise<void> {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new Error('Nominal transfer harus lebih dari nol.')
+  if (input.walletId === input.destinationWalletId) throw new Error('Dompet asal dan tujuan harus berbeda.')
+  if (!input.transactionDate || Number.isNaN(Date.parse(input.transactionDate))) throw new Error('Tanggal transfer tidak valid.')
+  const [source, destination] = await Promise.all([
+    db.wallets.get(input.walletId), db.wallets.get(input.destinationWalletId),
+  ])
+  if (!source || !destination) throw new Error('Dompet asal atau tujuan tidak ditemukan.')
+  const now = new Date().toISOString()
+  await db.transactions.add({
+    id: makeId(), type: 'transfer', amount: input.amount, walletId: input.walletId,
+    destinationWalletId: input.destinationWalletId, transactionDate: input.transactionDate,
+    note: input.note.trim(), createdAt: now, updatedAt: now,
+  })
+}
