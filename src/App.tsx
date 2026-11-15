@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Plus, Wallet, X, CalendarDays, CheckCircle2, Pencil, Trash2 } from 'lucide-react'
 import { calculateWalletBalances } from './core/balance'
 import { formatRupiah } from './core/money'
-import { addTransaction, getFinanceSnapshot, initializeFinanceData } from './core/finance'
+import { addTransaction, deleteTransaction, getFinanceSnapshot, initializeFinanceData, updateTransaction } from './core/finance'
 import type { CategoryRecord, TransactionRecord, WalletRecord } from './database/db'
 
 type TransactionType = 'income' | 'expense'
@@ -14,6 +14,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [ready, setReady] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -53,11 +54,30 @@ export default function App() {
     if (!wallets[0] || !categoryId) { setError('Dompet atau kategori belum siap. Coba lagi.'); return }
     setSaving(true)
     try {
-      await addTransaction({ type, amount: numericAmount, walletId: wallets[0].id, categoryId, transactionDate, note })
-      await refresh(); setAmount(''); setNote(''); setTransactionDate(today()); setModalOpen(false)
+      const input = { type, amount: numericAmount, walletId: wallets[0].id, categoryId, transactionDate, note }
+      if (editingId) await updateTransaction(editingId, input)
+      else await addTransaction(input)
+      await refresh(); setAmount(''); setNote(''); setTransactionDate(today()); setEditingId(null); setModalOpen(false)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Transaksi gagal disimpan.')
     } finally { setSaving(false) }
+  }
+
+  function openNewTransaction() {
+    setEditingId(null); setType('expense'); setAmount(''); setNote(''); setTransactionDate(today()); setError(''); setModalOpen(true)
+  }
+
+  function openEditTransaction(transaction: TransactionRecord) {
+    setEditingId(transaction.id); setType(transaction.type === 'income' ? 'income' : 'expense')
+    setAmount(String(transaction.amount)); setCategoryId(transaction.categoryId ?? '')
+    setTransactionDate(transaction.transactionDate); setNote(transaction.note); setError(''); setModalOpen(true)
+  }
+
+  async function handleDelete(transaction: TransactionRecord) {
+    const label = transaction.note || 'transaksi ini'
+    if (!window.confirm('Hapus ' + label + '? Saldo dan ringkasan akan dihitung ulang.')) return
+    try { await deleteTransaction(transaction.id); await refresh(); setError('') }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Transaksi gagal dihapus.') }
   }
 
   return (
@@ -84,13 +104,13 @@ export default function App() {
       <section className="transaction-section">
         <div className="section-heading">
           <div><p className="eyebrow">AKTIVITAS</p><h2>Transaksi terbaru</h2></div>
-          <button className="primary-button" type="button" onClick={() => { setError(''); setModalOpen(true) }} disabled={!ready}><Plus size={17} /> Catat</button>
+          <button className="primary-button" type="button" onClick={openNewTransaction} disabled={!ready}><Plus size={17} /> Catat</button>
         </div>
         {transactions.length === 0 ? (
           <div className="empty-state">
             <div className="first-step-icon"><BarChart3 size={22} /></div><h3>Belum ada transaksi</h3>
             <p>Catat pemasukan atau pengeluaran pertamamu untuk mulai melihat arus uang.</p>
-            <button className="text-button" type="button" onClick={() => setModalOpen(true)} disabled={!ready}>+ Tambah transaksi pertama</button>
+            <button className="text-button" type="button" onClick={openNewTransaction} disabled={!ready}>+ Tambah transaksi pertama</button>
           </div>
         ) : (
           <div className="transaction-list">
@@ -100,7 +120,7 @@ export default function App() {
               return <article className="transaction-row" key={transaction.id}>
                 <div className={`transaction-icon ${income ? 'income' : 'expense'}`}>{income ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div>
                 <div className="transaction-info"><strong>{category?.name ?? 'Transaksi'}</strong><span>{transaction.note || (income ? 'Pemasukan' : 'Pengeluaran')} · {transaction.transactionDate}</span></div>
-                <strong className={income ? 'amount-income' : 'amount-expense'}>{income ? '+' : '−'}{formatRupiah(transaction.amount)}</strong>
+                <div className="transaction-trailing"><strong className={income ? 'amount-income' : 'amount-expense'}>{income ? '+' : '−'}{formatRupiah(transaction.amount)}</strong><div className="transaction-actions"><button type="button" className="row-action" aria-label="Edit transaksi" onClick={() => openEditTransaction(transaction)}><Pencil size={14} /></button><button type="button" className="row-action delete-action" aria-label="Hapus transaksi" onClick={() => handleDelete(transaction)}><Trash2 size={14} /></button></div></div>
               </article>
             })}
           </div>
@@ -109,7 +129,7 @@ export default function App() {
       <footer>Rupia <span>•</span> Versi awal 0.2.0 <span>•</span> Data tersimpan lokal</footer>
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalOpen(false) }}>
         <section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="modal-heading"><div><p className="eyebrow">TRANSAKSI BARU</p><h2 id="modal-title">Catat uangmu</h2></div><button className="icon-button" type="button" onClick={() => setModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div>
+          <div className="modal-heading"><div><p className="eyebrow">{editingId ? 'UBAH TRANSAKSI' : 'TRANSAKSI BARU'}</p><h2 id="modal-title">{editingId ? 'Edit transaksi' : 'Catat uangmu'}</h2></div><button className="icon-button" type="button" onClick={() => setModalOpen(false)} aria-label="Tutup"><X size={20} /></button></div>
           <form onSubmit={submitTransaction}>
             <div className="type-switch" role="group" aria-label="Jenis transaksi">
               <button type="button" className={type === 'income' ? 'selected income-choice' : ''} onClick={() => setType('income')}><ArrowDownLeft size={17} /> Pemasukan</button>
@@ -124,7 +144,7 @@ export default function App() {
             <label className="field-label" htmlFor="note">Catatan <span>(opsional)</span></label>
             <input id="note" className="form-input" type="text" maxLength={120} placeholder="Misalnya: makan siang" value={note} onChange={(event) => setNote(event.target.value)} />
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="save-button" type="submit" disabled={saving || !ready}>{saving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> Simpan transaksi</>}</button>
+            <button className="save-button" type="submit" disabled={saving || !ready}>{saving ? 'Menyimpan…' : <><CheckCircle2 size={18} /> {editingId ? 'Simpan perubahan' : 'Simpan transaksi'}</>}</button>
           </form>
         </section>
       </div>}
