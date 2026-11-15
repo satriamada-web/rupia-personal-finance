@@ -1,4 +1,4 @@
-import { db, type CategoryRecord, type TransactionRecord, type WalletRecord } from '../database/db'
+import { db, type BudgetRecord, type CategoryRecord, type TransactionRecord, type WalletRecord } from '../database/db'
 
 const defaultCategories: Array<Pick<CategoryRecord, 'id' | 'name' | 'type' | 'icon' | 'color' | 'isDefault'>> = [
   { id: 'income-salary', name: 'Uang saku', type: 'income', icon: 'wallet', color: '#39815d', isDefault: true },
@@ -53,10 +53,10 @@ export async function addTransaction(input: NewTransaction): Promise<void> {
 }
 
 export async function getFinanceSnapshot() {
-  const [wallets, categories, transactions] = await Promise.all([
-    db.wallets.toArray(), db.categories.toArray(), db.transactions.orderBy('transactionDate').reverse().toArray(),
+  const [wallets, categories, transactions, budgets] = await Promise.all([
+    db.wallets.toArray(), db.categories.toArray(), db.transactions.orderBy('transactionDate').reverse().toArray(), db.budgets.toArray(),
   ])
-  return { wallets, categories, transactions: transactions.filter((item) => !item.deletedAt) }
+  return { wallets, categories, transactions: transactions.filter((item) => !item.deletedAt), budgets }
 }
 
 export async function updateTransaction(id: string, input: NewTransaction): Promise<void> {
@@ -111,4 +111,24 @@ export async function addTransfer(input: {
     destinationWalletId: input.destinationWalletId, transactionDate: input.transactionDate,
     note: input.note.trim(), createdAt: now, updatedAt: now,
   })
+}
+
+
+export async function setMonthlyBudget(input: { month: string; categoryId: string; amount: number }): Promise<void> {
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.month)) throw new Error('Pilih bulan yang valid.')
+  if (!Number.isSafeInteger(input.amount) || input.amount < 0) throw new Error('Anggaran harus berupa Rupiah bulat dan tidak boleh negatif.')
+  const category = await db.categories.get(input.categoryId)
+  if (!category || category.type !== 'expense') throw new Error('Anggaran hanya dapat dibuat untuk kategori pengeluaran.')
+  const id = `budget-${input.month}-${input.categoryId}`
+  if (input.amount === 0) {
+    await db.budgets.delete(id)
+    return
+  }
+  const existing = await db.budgets.get(id)
+  const now = new Date().toISOString()
+  const record: BudgetRecord = {
+    id, month: input.month, categoryId: input.categoryId, amount: input.amount,
+    createdAt: existing?.createdAt ?? now, updatedAt: now,
+  }
+  await db.budgets.put(record)
 }
