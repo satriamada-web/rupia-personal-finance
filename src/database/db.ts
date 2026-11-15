@@ -21,7 +21,10 @@ export interface CategoryRecord {
 
 export interface BudgetRecord {
   id: string
+  /** Legacy month field retained for backups created by Rupia v1/v2. */
   month: string
+  period?: 'daily' | 'weekly' | 'monthly'
+  periodKey?: string
   categoryId: string
   amount: number
   createdAt: string
