@@ -298,6 +298,20 @@ export async function addGoalContribution(input: { goalId: string; amount: numbe
   await db.goalContributions.add({ id: makeId(), goalId: input.goalId, amount: input.amount, contributionDate: input.contributionDate, note: input.note.trim(), createdAt: now })
 }
 
+export async function updateGoalContribution(id: string, input: { amount: number; contributionDate: string; note: string }): Promise<void> {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new Error('Kontribusi harus berupa nominal Rupiah bulat lebih dari nol.')
+  if (!input.contributionDate || Number.isNaN(Date.parse(input.contributionDate))) throw new Error('Tanggal kontribusi tidak valid.')
+  const existing = await db.goalContributions.get(id)
+  if (!existing) throw new Error('Catatan kontribusi tidak ditemukan.')
+  await db.goalContributions.update(id, { amount: input.amount, contributionDate: input.contributionDate, note: input.note.trim() })
+}
+
+export async function deleteGoalContribution(id: string): Promise<void> {
+  const existing = await db.goalContributions.get(id)
+  if (!existing) throw new Error('Catatan kontribusi tidak ditemukan.')
+  await db.goalContributions.delete(id)
+}
+
 export async function deleteSavingsGoal(id: string): Promise<void> {
   await db.transaction('rw', db.savingsGoals, db.goalContributions, async () => {
     if (!await db.savingsGoals.get(id)) throw new Error('Target tabungan tidak ditemukan.')
