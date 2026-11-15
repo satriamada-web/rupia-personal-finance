@@ -5,14 +5,14 @@
 Rupia adalah aplikasi pencatatan keuangan pribadi yang mengutamakan pengalaman sederhana, ramah, dan offline-first. Proyek ini berdiri sendiri dan tidak terkait dengan LabaKita, Semusika, atau EVO.
 
 ## Status
-**M0 — Foundation (in progress).** Saat ini fondasi aplikasi web sedang disiapkan. Fitur pencatatan transaksi belum dianggap selesai sampai diuji.
+**M5 — Persiapan Android.** Aplikasi web/PWA sudah memiliki konfigurasi Capacitor dan workflow untuk membangun APK debug secara otomatis.
 
 ## Teknologi
 - React + TypeScript + Vite
 - Dexie + IndexedDB untuk penyimpanan lokal web
 - PWA untuk pengalaman installable dan cache aplikasi
 - Vitest untuk pengujian
-- Capacitor Android dan SQLite direncanakan pada tahap platform berikutnya
+- Capacitor 8 untuk membungkus aplikasi web menjadi Android APK\n- Penyimpanan Android saat ini masih memakai IndexedDB pada WebView; migrasi SQLite native belum dilakukan
 
 ## Menjalankan lokal
 ```bash
