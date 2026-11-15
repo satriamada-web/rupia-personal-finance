@@ -1,3 +1,4 @@
+import { getBudgetPeriodRange, type BudgetPeriod } from './budget'
 import { db, type BudgetRecord, type CategoryRecord, type TransactionRecord, type WalletRecord, type SavingsGoalRecord, type GoalContributionRecord } from '../database/db'
 
 const defaultCategories: Array<Pick<CategoryRecord, 'id' | 'name' | 'type' | 'icon' | 'color' | 'isDefault'>> = [
@@ -115,15 +116,12 @@ export async function addTransfer(input: {
 }
 
 
-export type BudgetPeriod = 'daily' | 'weekly' | 'monthly'
-
 export async function setBudget(input: { period: BudgetPeriod; periodKey: string; categoryId: string; amount: number }): Promise<void> {
-  const validKey = input.period === 'daily'
-    ? /^\d{4}-\d{2}-\d{2}$/.test(input.periodKey)
-    : input.period === 'weekly'
-      ? /^\d{4}-\d{2}-\d{2}$/.test(input.periodKey)
-      : /^\d{4}-(0[1-9]|1[0-2])$/.test(input.periodKey)
-  if (!validKey || Number.isNaN(Date.parse(input.periodKey + (input.period === 'monthly' ? '-01' : 'T12:00:00')))) throw new Error('Periode anggaran tidak valid.')
+  try {
+    getBudgetPeriodRange(input.period, input.periodKey)
+  } catch {
+    throw new Error('Periode anggaran tidak valid.')
+  }
   if (!Number.isSafeInteger(input.amount) || input.amount < 0) throw new Error('Anggaran harus berupa Rupiah bulat dan tidak boleh negatif.')
   const category = await db.categories.get(input.categoryId)
   if (!category || category.type !== 'expense') throw new Error('Anggaran hanya dapat dibuat untuk kategori pengeluaran.')
