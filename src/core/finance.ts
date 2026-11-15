@@ -115,23 +115,36 @@ export async function addTransfer(input: {
 }
 
 
-export async function setMonthlyBudget(input: { month: string; categoryId: string; amount: number }): Promise<void> {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.month)) throw new Error('Pilih bulan yang valid.')
+export type BudgetPeriod = 'daily' | 'weekly' | 'monthly'
+
+export async function setBudget(input: { period: BudgetPeriod; periodKey: string; categoryId: string; amount: number }): Promise<void> {
+  const validKey = input.period === 'daily'
+    ? /^\\d{4}-\\d{2}-\\d{2}$/.test(input.periodKey)
+    : input.period === 'weekly'
+      ? /^\\d{4}-\\d{2}-\\d{2}$/.test(input.periodKey)
+      : /^\\d{4}-(0[1-9]|1[0-2])$/.test(input.periodKey)
+  if (!validKey || Number.isNaN(Date.parse(input.periodKey + (input.period === 'monthly' ? '-01' : 'T12:00:00')))) throw new Error('Periode anggaran tidak valid.')
   if (!Number.isSafeInteger(input.amount) || input.amount < 0) throw new Error('Anggaran harus berupa Rupiah bulat dan tidak boleh negatif.')
   const category = await db.categories.get(input.categoryId)
   if (!category || category.type !== 'expense') throw new Error('Anggaran hanya dapat dibuat untuk kategori pengeluaran.')
-  const id = `budget-${input.month}-${input.categoryId}`
+  const legacyMonth = input.period === 'monthly' ? input.periodKey : input.periodKey.slice(0, 7)
+  const id = `budget-${input.period}-${input.periodKey}-${input.categoryId}`
   if (input.amount === 0) {
     await db.budgets.delete(id)
+    if (input.period === 'monthly') await db.budgets.delete(`budget-${input.periodKey}-${input.categoryId}`)
     return
   }
   const existing = await db.budgets.get(id)
   const now = new Date().toISOString()
-  const record: BudgetRecord = {
-    id, month: input.month, categoryId: input.categoryId, amount: input.amount,
+  await db.budgets.put({
+    id, month: legacyMonth, period: input.period, periodKey: input.periodKey,
+    categoryId: input.categoryId, amount: input.amount,
     createdAt: existing?.createdAt ?? now, updatedAt: now,
-  }
-  await db.budgets.put(record)
+  })
+}
+
+export async function setMonthlyBudget(input: { month: string; categoryId: string; amount: number }): Promise<void> {
+  return setBudget({ period: 'monthly', periodKey: input.month, categoryId: input.categoryId, amount: input.amount })
 }
 
 
