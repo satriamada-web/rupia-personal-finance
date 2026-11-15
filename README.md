@@ -12,7 +12,8 @@ Rupia adalah aplikasi pencatatan keuangan pribadi yang mengutamakan pengalaman s
 - Dexie + IndexedDB untuk penyimpanan lokal web
 - PWA untuk pengalaman installable dan cache aplikasi
 - Vitest untuk pengujian
-- Capacitor 8 untuk membungkus aplikasi web menjadi Android APK\n- Penyimpanan Android saat ini masih memakai IndexedDB pada WebView; migrasi SQLite native belum dilakukan
+- Capacitor 8 untuk membungkus aplikasi web menjadi Android APK
+- Penyimpanan Android saat ini masih memakai IndexedDB pada WebView; migrasi SQLite native belum dilakukan
 
 ## Menjalankan lokal
 ```bash
